@@ -1084,6 +1084,7 @@ const make = Effect.fn("make")(function* () {
         createdAt: now,
         commandTag: "assistant-complete",
         finalDeltaCommandTag: "assistant-delta-finalize",
+        allowEmptyCompletion: existingAssistantMessage !== undefined,
         ...(assistantCompletion.fallbackText !== undefined && shouldApplyFallbackCompletionText
           ? { fallbackText: assistantCompletion.fallbackText }
           : {}),
@@ -1121,6 +1122,9 @@ const make = Effect.fn("make")(function* () {
               createdAt: now,
               commandTag: "assistant-complete-finalize",
               finalDeltaCommandTag: "assistant-delta-finalize-fallback",
+              allowEmptyCompletion: thread.messages.some(
+                (entry) => entry.id === assistantMessageId,
+              ),
             }),
           { concurrency: 1 },
         ).pipe(Effect.asVoid);
