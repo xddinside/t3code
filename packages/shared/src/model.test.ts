@@ -7,6 +7,7 @@ import {
   getDefaultEffort,
   hasContextWindowOption,
   hasEffortLevel,
+  inferProviderForModel,
   isClaudeUltrathinkPrompt,
   normalizeModelSlug,
   resolveApiModelId,
@@ -93,6 +94,15 @@ describe("capability helpers", () => {
   it("checks effort support", () => {
     expect(hasEffortLevel(codexCaps, "xhigh")).toBe(true);
     expect(hasEffortLevel(codexCaps, "max")).toBe(false);
+  });
+});
+
+describe("inferProviderForModel", () => {
+  it("detects known provider model slugs", () => {
+    expect(inferProviderForModel("gpt-5.3-codex")).toBe("codex");
+    expect(inferProviderForModel("claude-sonnet-4-6")).toBe("claudeAgent");
+    expect(inferProviderForModel("sonnet")).toBe("claudeAgent");
+    expect(inferProviderForModel("minimax-m2.5-free")).toBe("opencode");
   });
 });
 

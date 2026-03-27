@@ -1,5 +1,5 @@
 import { Option, Schema, SchemaIssue, Struct } from "effect";
-import { ClaudeModelOptions, CodexModelOptions } from "./model";
+import { ClaudeModelOptions, CodexModelOptions, OpenCodeModelOptions } from "./model";
 import {
   ApprovalRequestId,
   CheckpointRef,
@@ -27,7 +27,7 @@ export const ORCHESTRATION_WS_CHANNELS = {
   domainEvent: "orchestration.domainEvent",
 } as const;
 
-export const ProviderKind = Schema.Literals(["codex", "claudeAgent"]);
+export const ProviderKind = Schema.Literals(["codex", "claudeAgent", "opencode"]);
 export type ProviderKind = typeof ProviderKind.Type;
 export const ProviderApprovalPolicy = Schema.Literals([
   "untrusted",
@@ -58,8 +58,44 @@ export const ClaudeModelSelection = Schema.Struct({
 });
 export type ClaudeModelSelection = typeof ClaudeModelSelection.Type;
 
-export const ModelSelection = Schema.Union([CodexModelSelection, ClaudeModelSelection]);
+export const OpenCodeModelSelection = Schema.Struct({
+  provider: Schema.Literal("opencode"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(OpenCodeModelOptions),
+});
+export type OpenCodeModelSelection = typeof OpenCodeModelSelection.Type;
+
+export const ModelSelection = Schema.Union([
+  CodexModelSelection,
+  ClaudeModelSelection,
+  OpenCodeModelSelection,
+]);
 export type ModelSelection = typeof ModelSelection.Type;
+
+export const CodexProviderStartOptions = Schema.Struct({
+  binaryPath: Schema.optional(TrimmedNonEmptyString),
+  homePath: Schema.optional(TrimmedNonEmptyString),
+});
+export type CodexProviderStartOptions = typeof CodexProviderStartOptions.Type;
+
+export const ClaudeProviderStartOptions = Schema.Struct({
+  binaryPath: Schema.optional(TrimmedNonEmptyString),
+});
+export type ClaudeProviderStartOptions = typeof ClaudeProviderStartOptions.Type;
+
+export const OpenCodeProviderStartOptions = Schema.Struct({
+  binaryPath: Schema.optional(TrimmedNonEmptyString),
+  baseUrl: Schema.optional(TrimmedNonEmptyString),
+  serverPassword: Schema.optional(TrimmedNonEmptyString),
+});
+export type OpenCodeProviderStartOptions = typeof OpenCodeProviderStartOptions.Type;
+
+export const ProviderStartOptions = Schema.Struct({
+  codex: Schema.optional(CodexProviderStartOptions),
+  claudeAgent: Schema.optional(ClaudeProviderStartOptions),
+  opencode: Schema.optional(OpenCodeProviderStartOptions),
+});
+export type ProviderStartOptions = typeof ProviderStartOptions.Type;
 
 export const RuntimeMode = Schema.Literals(["approval-required", "full-access"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
@@ -385,6 +421,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
     attachments: Schema.Array(ChatAttachment),
   }),
   modelSelection: Schema.optional(ModelSelection),
+  assistantDeliveryMode: Schema.optional(AssistantDeliveryMode),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
@@ -404,6 +441,7 @@ const ClientThreadTurnStartCommand = Schema.Struct({
     attachments: Schema.Array(UploadChatAttachment),
   }),
   modelSelection: Schema.optional(ModelSelection),
+  assistantDeliveryMode: Schema.optional(AssistantDeliveryMode),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),

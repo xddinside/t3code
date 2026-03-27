@@ -17,7 +17,7 @@ import {
   type ServerProvider,
   type ServerProviderModel,
 } from "@t3tools/contracts";
-import { normalizeModelSlug } from "@t3tools/shared/model";
+import { buildModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
 import {
   getCustomModelOptionsByProvider,
@@ -76,7 +76,6 @@ const TIMESTAMP_FORMAT_LABELS = {
 } as const;
 
 const EMPTY_SERVER_PROVIDERS: ReadonlyArray<ServerProvider> = [];
-
 type InstallProviderSettings = {
   provider: ProviderKind;
   title: string;
@@ -102,6 +101,16 @@ const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     title: "Claude",
     binaryPlaceholder: "Claude binary path",
     binaryDescription: "Path to the Claude binary",
+  },
+  {
+    provider: "opencode",
+    title: "OpenCode",
+    binaryPlaceholder: "OpenCode binary path",
+    binaryDescription: (
+      <>
+        Leave blank to use <code>opencode</code> from your PATH.
+      </>
+    ),
   },
 ];
 
@@ -301,12 +310,18 @@ function SettingsRouteView() {
         DEFAULT_UNIFIED_SETTINGS.providers.claudeAgent.binaryPath ||
       settings.providers.claudeAgent.customModels.length > 0,
     ),
+    opencode: Boolean(
+      settings.providers.opencode.binaryPath !==
+        DEFAULT_UNIFIED_SETTINGS.providers.opencode.binaryPath ||
+      settings.providers.opencode.customModels.length > 0,
+    ),
   });
   const [customModelInputByProvider, setCustomModelInputByProvider] = useState<
     Record<ProviderKind, string>
   >({
     codex: "",
     claudeAgent: "",
+    opencode: "",
   });
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
     Partial<Record<ProviderKind, string | null>>
@@ -553,10 +568,12 @@ function SettingsRouteView() {
     setOpenProviderDetails({
       codex: false,
       claudeAgent: false,
+      opencode: false,
     });
     setCustomModelInputByProvider({
       codex: "",
       claudeAgent: "",
+      opencode: "",
     });
     setCustomModelErrorByProvider({});
   }
@@ -843,7 +860,7 @@ function SettingsRouteView() {
                           textGenerationModelSelection: resolveAppModelSelectionState(
                             {
                               ...settings,
-                              textGenerationModelSelection: { provider, model },
+                              textGenerationModelSelection: buildModelSelection(provider, model),
                             },
                             serverProviders,
                           ),
@@ -868,11 +885,11 @@ function SettingsRouteView() {
                           textGenerationModelSelection: resolveAppModelSelectionState(
                             {
                               ...settings,
-                              textGenerationModelSelection: {
-                                provider: textGenProvider,
-                                model: textGenModel,
-                                ...(nextOptions ? { options: nextOptions } : {}),
-                              },
+                              textGenerationModelSelection: buildModelSelection(
+                                textGenProvider,
+                                textGenModel,
+                                nextOptions,
+                              ),
                             },
                             serverProviders,
                           ),
@@ -1240,7 +1257,9 @@ function SettingsRouteView() {
                                 placeholder={
                                   providerCard.provider === "codex"
                                     ? "gpt-6.7-codex-ultra-preview"
-                                    : "claude-sonnet-5-0"
+                                    : providerCard.provider === "opencode"
+                                      ? "minimax-m2.5-free"
+                                      : "claude-sonnet-5-0"
                                 }
                                 spellCheck={false}
                               />

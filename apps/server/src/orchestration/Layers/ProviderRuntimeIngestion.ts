@@ -686,6 +686,7 @@ const make = Effect.gen(function* () {
     commandTag: string;
     finalDeltaCommandTag: string;
     fallbackText?: string;
+    allowEmptyCompletion?: boolean;
   }) =>
     Effect.gen(function* () {
       const bufferedText = yield* takeBufferedAssistantText(input.messageId);
@@ -695,6 +696,11 @@ const make = Effect.gen(function* () {
           : (input.fallbackText?.trim().length ?? 0) > 0
             ? input.fallbackText!
             : "";
+
+      if (text.length === 0 && !input.allowEmptyCompletion) {
+        yield* clearAssistantMessageState(input.messageId);
+        return;
+      }
 
       if (text.length > 0) {
         yield* orchestrationEngine.dispatch({
@@ -1118,6 +1124,7 @@ const make = Effect.gen(function* () {
           createdAt: now,
           commandTag: "assistant-complete",
           finalDeltaCommandTag: "assistant-delta-finalize",
+          allowEmptyCompletion: existingAssistantMessage !== undefined,
           ...(assistantCompletion.fallbackText !== undefined && shouldApplyFallbackCompletionText
             ? { fallbackText: assistantCompletion.fallbackText }
             : {}),
@@ -1155,6 +1162,9 @@ const make = Effect.gen(function* () {
                 createdAt: now,
                 commandTag: "assistant-complete-finalize",
                 finalDeltaCommandTag: "assistant-delta-finalize-fallback",
+                allowEmptyCompletion: thread.messages.some(
+                  (entry) => entry.id === assistantMessageId,
+                ),
               }),
             { concurrency: 1 },
           ).pipe(Effect.asVoid);

@@ -71,6 +71,25 @@ const CLAUDE_MODELS: ReadonlyArray<ServerProviderModel> = [
   },
 ];
 
+const OPENCODE_MODELS: ReadonlyArray<ServerProviderModel> = [
+  {
+    slug: "minimax-m2.5-free",
+    name: "MiniMax M2.5 Free",
+    isCustom: false,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    },
+  },
+];
+
 describe("getComposerProviderState", () => {
   it("returns codex defaults when no codex draft options exist", () => {
     const state = getComposerProviderState({
@@ -269,6 +288,42 @@ describe("getComposerProviderState", () => {
       modelOptionsForDispatch: {
         effort: "high",
       },
+    });
+  });
+
+  it("returns OpenCode defaults when no opencode draft options exist", () => {
+    const state = getComposerProviderState({
+      provider: "opencode",
+      model: "minimax-m2.5-free",
+      models: OPENCODE_MODELS,
+      prompt: "",
+      modelOptions: undefined,
+    });
+
+    expect(state).toEqual({
+      provider: "opencode",
+      promptEffort: "high",
+      modelOptionsForDispatch: undefined,
+    });
+  });
+
+  it("normalizes OpenCode variant dispatch options", () => {
+    const state = getComposerProviderState({
+      provider: "opencode",
+      model: "minimax-m2.5-free",
+      models: OPENCODE_MODELS,
+      prompt: "",
+      modelOptions: {
+        opencode: {
+          variant: "medium",
+        },
+      },
+    });
+
+    expect(state).toEqual({
+      provider: "opencode",
+      promptEffort: "medium",
+      modelOptionsForDispatch: { variant: "medium" },
     });
   });
 });

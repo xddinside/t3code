@@ -75,7 +75,16 @@ function mockCommandSpawnerLayer(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) => {
       const cmd = command as unknown as { command: string; args: ReadonlyArray<string> };
-      return Effect.succeed(mockHandle(handler(cmd.command, cmd.args)));
+      return Effect.sync(() => {
+        try {
+          return mockHandle(handler(cmd.command, cmd.args));
+        } catch (error) {
+          if (cmd.command === "opencode") {
+            return mockHandle({ stdout: "opencode 1.0.0\n", stderr: "", code: 0 });
+          }
+          throw error;
+        }
+      });
     }),
   );
 }

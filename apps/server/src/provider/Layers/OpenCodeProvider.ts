@@ -1,0 +1,219 @@
+import type {
+  ModelCapabilities,
+  OpenCodeSettings,
+  ServerProvider,
+  ServerProviderModel,
+} from "@t3tools/contracts";
+import { Effect, Equal, Layer, Result, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+
+import {
+  buildServerProvider,
+  collectStreamAsString,
+  DEFAULT_TIMEOUT_MS,
+  detailFromResult,
+  isCommandMissingCause,
+  parseGenericCliVersion,
+  providerModelsFromSettings,
+  type CommandResult,
+} from "../providerSnapshot";
+import { makeManagedServerProvider } from "../makeManagedServerProvider";
+import { OpenCodeProvider } from "../Services/OpenCodeProvider";
+import { ServerSettingsError, ServerSettingsService } from "../../serverSettings";
+
+const PROVIDER = "opencode" as const;
+
+const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
+  {
+    slug: "minimax-m2.5-free",
+    name: "MiniMax M2.5 Free",
+    isCustom: false,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    } satisfies ModelCapabilities,
+  },
+  {
+    slug: "mimo-v2-pro-free",
+    name: "MiMo V2 Pro Free",
+    isCustom: false,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    } satisfies ModelCapabilities,
+  },
+];
+
+const runOpenCodeCommand = (args: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const openCodeSettings = yield* Effect.service(ServerSettingsService).pipe(
+      Effect.flatMap((service) => service.getSettings),
+      Effect.map((settings) => settings.providers.opencode),
+    );
+    const command = ChildProcess.make(openCodeSettings.binaryPath, [...args], {
+      shell: process.platform === "win32",
+    });
+
+    const child = yield* spawner.spawn(command);
+    const [stdout, stderr, exitCode] = yield* Effect.all(
+      [
+        collectStreamAsString(child.stdout),
+        collectStreamAsString(child.stderr),
+        child.exitCode.pipe(Effect.map(Number)),
+      ],
+      { concurrency: "unbounded" },
+    );
+
+    return { stdout, stderr, code: exitCode } satisfies CommandResult;
+  }).pipe(Effect.scoped);
+
+export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatus")(
+  function* (): Effect.fn.Return<
+    ServerProvider,
+    ServerSettingsError,
+    ChildProcessSpawner.ChildProcessSpawner | ServerSettingsService
+  > {
+    const openCodeSettings = yield* Effect.service(ServerSettingsService).pipe(
+      Effect.flatMap((service) => service.getSettings),
+      Effect.map((settings) => settings.providers.opencode),
+    );
+    const checkedAt = new Date().toISOString();
+    const models = providerModelsFromSettings(
+      BUILT_IN_MODELS,
+      PROVIDER,
+      openCodeSettings.customModels,
+    );
+
+    if (!openCodeSettings.enabled) {
+      return buildServerProvider({
+        provider: PROVIDER,
+        enabled: false,
+        checkedAt,
+        models,
+        probe: {
+          installed: true,
+          version: null,
+          status: "ready",
+          authStatus: "unknown",
+        },
+      });
+    }
+
+    const versionProbe = yield* runOpenCodeCommand(["--version"]).pipe(
+      Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
+      Effect.result,
+    );
+
+    if (Result.isFailure(versionProbe)) {
+      const error = versionProbe.failure;
+      return buildServerProvider({
+        provider: PROVIDER,
+        enabled: openCodeSettings.enabled,
+        checkedAt,
+        models,
+        probe: {
+          installed: false,
+          version: null,
+          status: "error",
+          authStatus: "unknown",
+          message: isCommandMissingCause(error)
+            ? "OpenCode CLI (`opencode`) is not installed or not on PATH."
+            : `Failed to execute OpenCode CLI health check: ${error instanceof Error ? error.message : String(error)}.`,
+        },
+      });
+    }
+
+    if (versionProbe.success._tag === "None") {
+      return buildServerProvider({
+        provider: PROVIDER,
+        enabled: openCodeSettings.enabled,
+        checkedAt,
+        models,
+        probe: {
+          installed: true,
+          version: null,
+          status: "warning",
+          authStatus: "unknown",
+          message: "OpenCode CLI is installed but did not respond before the health-check timeout.",
+        },
+      });
+    }
+
+    const versionResult = versionProbe.success.value;
+    const parsedVersion = parseGenericCliVersion(
+      `${versionResult.stdout}\n${versionResult.stderr}`,
+    );
+    if (versionResult.code !== 0) {
+      const detail = detailFromResult(versionResult);
+      return buildServerProvider({
+        provider: PROVIDER,
+        enabled: openCodeSettings.enabled,
+        checkedAt,
+        models,
+        probe: {
+          installed: true,
+          version: parsedVersion,
+          status: "warning",
+          authStatus: "unknown",
+          message: detail
+            ? `OpenCode CLI is installed but failed to run. ${detail}`
+            : "OpenCode CLI is installed but failed to run.",
+        },
+      });
+    }
+
+    return buildServerProvider({
+      provider: PROVIDER,
+      enabled: openCodeSettings.enabled,
+      checkedAt,
+      models,
+      probe: {
+        installed: true,
+        version: parsedVersion,
+        status: "ready",
+        authStatus: "unknown",
+        message: "OpenCode CLI is installed and reachable.",
+      },
+    });
+  },
+);
+
+export const OpenCodeProviderLive = Layer.effect(
+  OpenCodeProvider,
+  Effect.gen(function* () {
+    const serverSettings = yield* ServerSettingsService;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+    const checkProvider = checkOpenCodeProviderStatus().pipe(
+      Effect.provideService(ServerSettingsService, serverSettings),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
+
+    return yield* makeManagedServerProvider<OpenCodeSettings>({
+      getSettings: serverSettings.getSettings.pipe(
+        Effect.map((settings) => settings.providers.opencode),
+        Effect.orDie,
+      ),
+      streamSettings: serverSettings.streamChanges.pipe(
+        Stream.map((settings) => settings.providers.opencode),
+      ),
+      haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
+      checkProvider,
+    });
+  }),
+);

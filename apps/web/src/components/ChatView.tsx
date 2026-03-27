@@ -21,7 +21,11 @@ import {
   ProviderInteractionMode,
   RuntimeMode,
 } from "@t3tools/contracts";
-import { applyClaudePromptEffortPrefix, normalizeModelSlug } from "@t3tools/shared/model";
+import {
+  applyClaudePromptEffortPrefix,
+  buildModelSelection,
+  normalizeModelSlug,
+} from "@t3tools/shared/model";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
@@ -121,7 +125,7 @@ import {
   resolveSelectableProvider,
 } from "../providerModels";
 import { useSettings } from "../hooks/useSettings";
-import { resolveAppModelSelection } from "../modelSelection";
+import { getCustomModelOptionsByProvider, resolveAppModelSelection } from "../modelSelection";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
   type ComposerImageAttachment,
@@ -635,11 +639,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const selectedPromptEffort = composerProviderState.promptEffort;
   const selectedModelOptionsForDispatch = composerProviderState.modelOptionsForDispatch;
   const selectedModelSelection = useMemo<ModelSelection>(
-    () => ({
-      provider: selectedProvider,
-      model: selectedModel,
-      ...(selectedModelOptionsForDispatch ? { options: selectedModelOptionsForDispatch } : {}),
-    }),
+    () => buildModelSelection(selectedProvider, selectedModel, selectedModelOptionsForDispatch),
     [selectedModel, selectedModelOptionsForDispatch, selectedProvider],
   );
   const selectedModelForPicker = selectedModel;
@@ -1008,12 +1008,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const keybindings = serverConfigQuery.data?.keybindings ?? EMPTY_KEYBINDINGS;
   const availableEditors = serverConfigQuery.data?.availableEditors ?? EMPTY_AVAILABLE_EDITORS;
   const modelOptionsByProvider = useMemo(
-    () => ({
-      codex: providerStatuses.find((provider) => provider.provider === "codex")?.models ?? [],
-      claudeAgent:
-        providerStatuses.find((provider) => provider.provider === "claudeAgent")?.models ?? [],
-    }),
-    [providerStatuses],
+    () =>
+      getCustomModelOptionsByProvider(
+        settings,
+        providerStatuses,
+        selectedProvider,
+        selectedModelForPicker,
+      ),
+    [providerStatuses, selectedModelForPicker, selectedProvider, settings],
   );
   const selectedModelForPickerWithCustomFallback = useMemo(() => {
     const currentOptions = modelOptionsByProvider[selectedProvider];
@@ -2567,14 +2569,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
         }
       }
       const title = truncateTitle(titleSeed);
-      const threadCreateModelSelection: ModelSelection = {
-        provider: selectedProvider,
-        model:
-          selectedModel ||
+      const threadCreateModelSelection = buildModelSelection(
+        selectedProvider,
+        selectedModel ||
           activeProject.defaultModelSelection?.model ||
           DEFAULT_MODEL_BY_PROVIDER.codex,
-        ...(selectedModelSelection.options ? { options: selectedModelSelection.options } : {}),
-      };
+        selectedModelSelection.options,
+      );
 
       if (isLocalDraftThread) {
         await api.orchestration.dispatchCommand({
@@ -2977,11 +2978,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
       runtimeMode,
       selectedPromptEffort,
       selectedModelSelection,
+      selectedModel,
       selectedProvider,
       selectedProviderModels,
       setComposerDraftInteractionMode,
       setThreadError,
-      selectedModel,
     ],
   );
 
@@ -3105,7 +3106,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
 
   const onProviderModelSelect = useCallback(
     (provider: ProviderKind, model: string) => {
-      if (!activeThread) return;
       if (lockedProvider !== null && provider !== lockedProvider) {
         scheduleComposerFocus();
         return;
@@ -3117,22 +3117,19 @@ export default function ChatView({ threadId }: ChatViewProps) {
         providerStatuses,
         model,
       );
-      const nextModelSelection: ModelSelection = {
-        provider: resolvedProvider,
-        model: resolvedModel,
-      };
-      setComposerDraftModelSelection(activeThread.id, nextModelSelection);
+      const nextModelSelection = buildModelSelection(resolvedProvider, resolvedModel);
+      setComposerDraftModelSelection(threadId, nextModelSelection);
       setStickyComposerModelSelection(nextModelSelection);
       scheduleComposerFocus();
     },
     [
-      activeThread,
-      lockedProvider,
-      scheduleComposerFocus,
       setComposerDraftModelSelection,
       setStickyComposerModelSelection,
       providerStatuses,
       settings,
+      threadId,
+      lockedProvider,
+      scheduleComposerFocus,
     ],
   );
   const setPromptFromTraits = useCallback(

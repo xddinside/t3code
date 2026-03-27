@@ -1,10 +1,16 @@
 import {
+  getDefaultReasoningEffort,
+  isClaudeUltrathinkPrompt,
+  normalizeOpenCodeModelOptions,
+  resolveEffort,
+  resolveReasoningEffortForProvider,
+} from "@t3tools/shared/model";
+import {
   type ProviderKind,
   type ProviderModelOptions,
   type ServerProviderModel,
   type ThreadId,
 } from "@t3tools/contracts";
-import { isClaudeUltrathinkPrompt, resolveEffort } from "@t3tools/shared/model";
 import type { ReactNode } from "react";
 import {
   getProviderModelCapabilities,
@@ -55,24 +61,28 @@ function getProviderStateFromCapabilities(
 ): ComposerProviderState {
   const { provider, model, models, prompt, modelOptions } = input;
   const caps = getProviderModelCapabilities(models, model, provider);
-  const providerOptions = modelOptions?.[provider];
 
   // Resolve effort
-  const rawEffort = providerOptions
-    ? "effort" in providerOptions
-      ? providerOptions.effort
-      : "reasoningEffort" in providerOptions
-        ? providerOptions.reasoningEffort
-        : null
-    : null;
+  let rawEffort: string | null = null;
+  switch (provider) {
+    case "codex":
+      rawEffort = modelOptions?.codex?.reasoningEffort ?? null;
+      break;
+    case "claudeAgent":
+      rawEffort = modelOptions?.claudeAgent?.effort ?? null;
+      break;
+    case "opencode":
+      rawEffort = modelOptions?.opencode?.variant ?? null;
+      break;
+  }
 
   const promptEffort = resolveEffort(caps, rawEffort) ?? null;
 
   // Normalize options for dispatch
   const normalizedOptions =
     provider === "codex"
-      ? normalizeCodexModelOptionsWithCapabilities(caps, providerOptions)
-      : normalizeClaudeModelOptionsWithCapabilities(caps, providerOptions);
+      ? normalizeCodexModelOptionsWithCapabilities(caps, modelOptions?.codex)
+      : normalizeClaudeModelOptionsWithCapabilities(caps, modelOptions?.claudeAgent);
 
   // Ultrathink styling (driven by capabilities data, not provider identity)
   const ultrathinkActive =
@@ -92,7 +102,7 @@ function getProviderStateFromCapabilities(
 
 const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
   codex: {
-    getState: (input) => getProviderStateFromCapabilities(input),
+    getState: (input) => getProviderStateFromCapabilities({ ...input, provider: "codex" }),
     renderTraitsMenuContent: ({
       threadId,
       model,
@@ -124,7 +134,7 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
     ),
   },
   claudeAgent: {
-    getState: (input) => getProviderStateFromCapabilities(input),
+    getState: (input) => getProviderStateFromCapabilities({ ...input, provider: "claudeAgent" }),
     renderTraitsMenuContent: ({
       threadId,
       model,
@@ -154,6 +164,22 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
         onPromptChange={onPromptChange}
       />
     ),
+  },
+  opencode: {
+    getState: ({ modelOptions }) => {
+      const promptEffort =
+        resolveReasoningEffortForProvider("opencode", modelOptions?.opencode?.variant) ??
+        getDefaultReasoningEffort("opencode");
+      const normalizedOpenCodeOptions = normalizeOpenCodeModelOptions(modelOptions?.opencode);
+
+      return {
+        provider: "opencode",
+        promptEffort,
+        modelOptionsForDispatch: normalizedOpenCodeOptions,
+      };
+    },
+    renderTraitsMenuContent: () => null,
+    renderTraitsPicker: () => null,
   },
 };
 

@@ -194,6 +194,22 @@ export function buildLegacyServerSettingsMigrationPatch(legacySettings: Record<s
     );
   }
 
+  if (Predicate.isString(legacySettings.opencodeBinaryPath)) {
+    patch.providers ??= {};
+    patch.providers.opencode ??= {};
+    patch.providers.opencode.binaryPath = legacySettings.opencodeBinaryPath;
+  }
+
+  if (Array.isArray(legacySettings.customOpenCodeModels)) {
+    patch.providers ??= {};
+    patch.providers.opencode ??= {};
+    patch.providers.opencode.customModels = normalizeCustomModelSlugs(
+      legacySettings.customOpenCodeModels,
+      new Set<string>(),
+      "opencode",
+    );
+  }
+
   return patch;
 }
 

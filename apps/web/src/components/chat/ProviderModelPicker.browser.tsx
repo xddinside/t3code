@@ -108,6 +108,41 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
       },
     ],
   },
+  {
+    provider: "opencode",
+    enabled: true,
+    installed: true,
+    version: "1.0.0",
+    status: "ready",
+    authStatus: "unknown",
+    checkedAt: new Date().toISOString(),
+    models: [
+      {
+        slug: "minimax-m2.5-free",
+        name: "MiniMax M2.5 Free",
+        isCustom: false,
+        capabilities: {
+          reasoningEffortLevels: [effort("low"), effort("medium"), effort("high", true)],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+      {
+        slug: "mimo-v2-pro-free",
+        name: "MiMo V2 Pro Free",
+        isCustom: false,
+        capabilities: {
+          reasoningEffortLevels: [effort("low"), effort("medium"), effort("high", true)],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+    ],
+  },
 ];
 
 async function mountPicker(props: {
@@ -168,6 +203,7 @@ describe("ProviderModelPicker", () => {
         const text = document.body.textContent ?? "";
         expect(text).toContain("Codex");
         expect(text).toContain("Claude");
+        expect(text).toContain("OpenCode");
         expect(text).not.toContain("Claude Sonnet 4.6");
       });
     } finally {

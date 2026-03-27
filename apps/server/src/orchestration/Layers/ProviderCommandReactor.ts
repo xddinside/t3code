@@ -5,16 +5,29 @@ import {
   type ModelSelection,
   type OrchestrationEvent,
   ProviderKind,
+  ProjectId,
   type OrchestrationSession,
-  ThreadId,
   type ProviderSession,
   type RuntimeMode,
+  ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
-import { Cache, Cause, Duration, Effect, Equal, Layer, Option, Schema, Stream } from "effect";
+import {
+  Cache,
+  Cause,
+  Duration,
+  Effect,
+  Equal,
+  FileSystem,
+  Layer,
+  Option,
+  Schema,
+  Stream,
+} from "effect";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
+import { ServerConfig } from "../../config.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { ProviderAdapterRequestError, ProviderServiceError } from "../../provider/Errors.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
@@ -138,6 +151,8 @@ const make = Effect.gen(function* () {
   const git = yield* GitCore;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const serverConfig = yield* ServerConfig;
   const handledTurnStartKeys = yield* Cache.make<string, true>({
     capacity: HANDLED_TURN_START_KEY_MAX,
     timeToLive: HANDLED_TURN_START_KEY_TTL,
@@ -204,6 +219,34 @@ const make = Effect.gen(function* () {
     return readModel.threads.find((entry) => entry.id === threadId);
   });
 
+  const resolveExistingWorkspaceCwd = Effect.fnUntraced(function* (input: {
+    readonly thread: {
+      readonly projectId: ProjectId;
+      readonly worktreePath: string | null;
+    };
+    readonly projects: ReadonlyArray<{
+      readonly id: ProjectId;
+      readonly workspaceRoot: string;
+    }>;
+  }) {
+    const workspaceCwd = resolveThreadWorkspaceCwd(input);
+    if (!workspaceCwd) {
+      return serverConfig.cwd;
+    }
+
+    const exists = yield* fileSystem.exists(workspaceCwd).pipe(Effect.orElseSucceed(() => false));
+    if (exists) {
+      return workspaceCwd;
+    }
+
+    yield* Effect.logWarning("provider command reactor falling back from missing workspace cwd", {
+      projectId: input.thread.projectId,
+      missingCwd: workspaceCwd,
+      fallbackCwd: serverConfig.cwd,
+    });
+    return serverConfig.cwd;
+  });
+
   const ensureSessionForThread = Effect.fnUntraced(function* (
     threadId: ThreadId,
     createdAt: string,
@@ -224,7 +267,8 @@ const make = Effect.gen(function* () {
       ? thread.session.providerName
       : undefined;
     const requestedModelSelection = options?.modelSelection;
-    const threadProvider: ProviderKind = currentProvider ?? thread.modelSelection.provider;
+    const threadProvider: ProviderKind =
+      currentProvider ?? requestedModelSelection?.provider ?? thread.modelSelection.provider;
     if (
       requestedModelSelection !== undefined &&
       requestedModelSelection.provider !== threadProvider
@@ -237,7 +281,7 @@ const make = Effect.gen(function* () {
     }
     const preferredProvider: ProviderKind = currentProvider ?? threadProvider;
     const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
-    const effectiveCwd = resolveThreadWorkspaceCwd({
+    const effectiveCwd = yield* resolveExistingWorkspaceCwd({
       thread,
       projects: readModel.projects,
     });
@@ -294,7 +338,7 @@ const make = Effect.gen(function* () {
       const shouldRestartForModelChange = modelChanged && sessionModelSwitch === "restart-session";
       const previousModelSelection = threadModelSelections.get(threadId);
       const shouldRestartForModelSelectionChange =
-        currentProvider === "claudeAgent" &&
+        (currentProvider === "claudeAgent" || currentProvider === "opencode") &&
         requestedModelSelection !== undefined &&
         !Equal.equals(previousModelSelection, requestedModelSelection);
 

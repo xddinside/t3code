@@ -115,12 +115,29 @@ function SidebarProvider({
       }
 
       // This sets the cookie to keep the sidebar state.
-      await cookieStore.set({
-        expires: Date.now() + SIDEBAR_COOKIE_MAX_AGE * 1000,
-        name: SIDEBAR_COOKIE_NAME,
-        path: "/",
-        value: String(openState),
-      });
+      const browserCookieStore = (
+        globalThis as typeof globalThis & {
+          cookieStore?: {
+            set: (input: {
+              expires: number;
+              name: string;
+              path: string;
+              value: string;
+            }) => Promise<void>;
+          };
+        }
+      ).cookieStore;
+
+      if (browserCookieStore) {
+        await browserCookieStore.set({
+          expires: Date.now() + SIDEBAR_COOKIE_MAX_AGE * 1000,
+          name: SIDEBAR_COOKIE_NAME,
+          path: "/",
+          value: String(openState),
+        });
+      } else if (typeof document !== "undefined") {
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${String(openState)}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+      }
     },
     [setOpenProp, open],
   );
