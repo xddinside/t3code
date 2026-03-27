@@ -108,21 +108,25 @@ const makeBootstrapInputStream = (fd: number) =>
     try: () => {
       const fdPath = resolveFdPath(fd);
       if (fdPath === undefined) {
-        const stream = new Net.Socket({
-          fd,
-          readable: true,
-          writable: false,
-        });
-        stream.setEncoding("utf8");
-        return stream;
+        return makeSocketStream(fd);
       }
 
-      const streamFd = NFS.openSync(fdPath, "r");
-      return NFS.createReadStream("", {
-        fd: streamFd,
-        encoding: "utf8",
-        autoClose: true,
-      });
+      try {
+        const streamFd = NFS.openSync(fdPath, "r");
+        return NFS.createReadStream("", {
+          fd: streamFd,
+          encoding: "utf8",
+          autoClose: true,
+        });
+      } catch (error) {
+        // Some Electron/Node runtimes expose the inherited fd but do not allow
+        // reopening it through `/proc/self/fd/<n>`. In that case, consume the
+        // original descriptor directly instead of failing desktop bootstrap.
+        if (isProcFdReopenUnavailable(error)) {
+          return makeSocketStream(fd);
+        }
+        throw error;
+      }
     },
     catch: (error) =>
       new BootstrapError({
@@ -130,6 +134,21 @@ const makeBootstrapInputStream = (fd: number) =>
         cause: error,
       }),
   });
+
+const makeSocketStream = (fd: number) => {
+  const stream = new Net.Socket({
+    fd,
+    readable: true,
+    writable: false,
+  });
+  stream.setEncoding("utf8");
+  return stream;
+};
+
+const isProcFdReopenUnavailable = Predicate.compose(
+  Predicate.hasProperty("code"),
+  (_) => _.code === "ENXIO" || _.code === "ENOENT" || _.code === "EBADF",
+);
 
 export function resolveFdPath(
   fd: number,
