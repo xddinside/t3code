@@ -471,4 +471,40 @@ describe("getComposerProviderState", () => {
 
     expect(state.modelOptionsForDispatch).not.toHaveProperty("fastMode");
   });
+
+  it("returns OpenCode defaults when no opencode draft options exist", () => {
+    const state = getComposerProviderState({
+      provider: "opencode",
+      model: "minimax-m2.5-free",
+      models: OPENCODE_MODELS,
+      prompt: "",
+      modelOptions: undefined,
+    });
+
+    expect(state).toEqual({
+      provider: "opencode",
+      promptEffort: "high",
+      modelOptionsForDispatch: undefined,
+    });
+  });
+
+  it("normalizes OpenCode variant dispatch options", () => {
+    const state = getComposerProviderState({
+      provider: "opencode",
+      model: "minimax-m2.5-free",
+      models: OPENCODE_MODELS,
+      prompt: "",
+      modelOptions: {
+        opencode: {
+          variant: "medium",
+        },
+      },
+    });
+
+    expect(state).toEqual({
+      provider: "opencode",
+      promptEffort: "medium",
+      modelOptionsForDispatch: { variant: "medium" },
+    });
+  });
 });

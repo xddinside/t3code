@@ -27,6 +27,7 @@ import {
   buildModelSelection,
   normalizeModelSlug,
 } from "@t3tools/shared/model";
+import { truncate } from "@t3tools/shared/String";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
@@ -2758,11 +2759,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           titleSeed = "New thread";
         }
       }
-      const title = truncateTitle(titleSeed);
-      const threadCreateModelSelection = buildModelSelection(
-        selectedProvider,
-        selectedModel ||
-      const title = truncateTitle(titleSeed);
+      const title = truncate(titleSeed);
       const threadCreateModelSelection = buildModelSelection(
         selectedProvider,
         selectedModel ||
