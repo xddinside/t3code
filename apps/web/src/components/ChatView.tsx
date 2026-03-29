@@ -73,7 +73,6 @@ import {
   proposedPlanTitle,
   resolvePlanFollowUpSubmission,
 } from "../proposedPlan";
-import { truncateTitle } from "../truncateTitle";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -2631,6 +2630,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
       const threadCreateModelSelection = buildModelSelection(
         selectedProvider,
         selectedModel ||
+      const title = truncateTitle(titleSeed);
+      const threadCreateModelSelection = buildModelSelection(
+        selectedProvider,
+        selectedModel ||
           activeProject.defaultModelSelection?.model ||
           DEFAULT_MODEL_BY_PROVIDER.codex,
         selectedModelSelection.options,
@@ -2711,6 +2714,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           attachments: turnAttachments,
         },
         modelSelection: selectedModelSelection,
+        titleSeed: title,
         runtimeMode,
         interactionMode,
         createdAt: messageCreatedAt,
@@ -2992,6 +2996,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
             attachments: [],
           },
           modelSelection: selectedModelSelection,
+          titleSeed: activeThread.title,
           runtimeMode,
           interactionMode: nextInteractionMode,
           ...(nextInteractionMode === "default" && activeProposedPlan
@@ -3071,7 +3076,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       effort: selectedPromptEffort,
       text: implementationPrompt,
     });
-    const nextThreadTitle = truncateTitle(buildPlanImplementationThreadTitle(planMarkdown));
+    const nextThreadTitle = truncate(buildPlanImplementationThreadTitle(planMarkdown));
     const nextThreadModelSelection: ModelSelection = selectedModelSelection;
 
     sendInFlightRef.current = true;
@@ -3107,6 +3112,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
             attachments: [],
           },
           modelSelection: selectedModelSelection,
+          titleSeed: nextThreadTitle,
           runtimeMode,
           interactionMode: "default",
           createdAt,
