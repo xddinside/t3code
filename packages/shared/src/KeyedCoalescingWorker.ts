@@ -26,28 +26,35 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
   readonly process: (key: K, value: V) => Effect.Effect<void, E, R>;
 }): Effect.Effect<KeyedCoalescingWorker<K, V>, never, Scope.Scope | R> =>
   Effect.gen(function* () {
-    const queue = yield* Effect.acquireRelease(TxQueue.unbounded<K>(), TxQueue.shutdown);
-    const stateRef = yield* TxRef.make<KeyedCoalescingWorkerState<K, V>>({
-      latestByKey: new Map(),
-      queuedKeys: new Set(),
-      activeKeys: new Set(),
-    });
+    const queue = yield* Effect.acquireRelease(
+      Effect.transaction(TxQueue.unbounded<K>()),
+      (queue) => Effect.transaction(TxQueue.shutdown(queue)),
+    );
+    const stateRef = yield* Effect.transaction(
+      TxRef.make<KeyedCoalescingWorkerState<K, V>>({
+        latestByKey: new Map(),
+        queuedKeys: new Set(),
+        activeKeys: new Set(),
+      }),
+    );
 
     const processKey = (key: K, value: V): Effect.Effect<void, E, R> =>
       options.process(key, value).pipe(
         Effect.flatMap(() =>
-          TxRef.modify(stateRef, (state) => {
-            const nextValue = state.latestByKey.get(key);
-            if (nextValue === undefined) {
-              const activeKeys = new Set(state.activeKeys);
-              activeKeys.delete(key);
-              return [null, { ...state, activeKeys }] as const;
-            }
+          Effect.transaction(
+            TxRef.modify(stateRef, (state) => {
+              const nextValue = state.latestByKey.get(key);
+              if (nextValue === undefined) {
+                const activeKeys = new Set(state.activeKeys);
+                activeKeys.delete(key);
+                return [null, { ...state, activeKeys }] as const;
+              }
 
-            const latestByKey = new Map(state.latestByKey);
-            latestByKey.delete(key);
-            return [nextValue, { ...state, latestByKey }] as const;
-          }).pipe(Effect.tx),
+              const latestByKey = new Map(state.latestByKey);
+              latestByKey.delete(key);
+              return [nextValue, { ...state, latestByKey }] as const;
+            }),
+          ),
         ),
         Effect.flatMap((nextValue) =>
           nextValue === null ? Effect.void : processKey(key, nextValue),
@@ -55,45 +62,48 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
       );
 
     const cleanupFailedKey = (key: K): Effect.Effect<void> =>
-      TxRef.modify(stateRef, (state) => {
-        const activeKeys = new Set(state.activeKeys);
-        activeKeys.delete(key);
+      Effect.transaction(
+        TxRef.modify(stateRef, (state) => {
+          const activeKeys = new Set(state.activeKeys);
+          activeKeys.delete(key);
 
-        if (state.latestByKey.has(key) && !state.queuedKeys.has(key)) {
-          const queuedKeys = new Set(state.queuedKeys);
-          queuedKeys.add(key);
-          return [true, { ...state, activeKeys, queuedKeys }] as const;
-        }
+          if (state.latestByKey.has(key) && !state.queuedKeys.has(key)) {
+            const queuedKeys = new Set(state.queuedKeys);
+            queuedKeys.add(key);
+            return [true, { ...state, activeKeys, queuedKeys }] as const;
+          }
 
-        return [false, { ...state, activeKeys }] as const;
-      }).pipe(
-        Effect.tx,
-        Effect.flatMap((shouldRequeue) =>
-          shouldRequeue ? TxQueue.offer(queue, key) : Effect.void,
+          return [false, { ...state, activeKeys }] as const;
+        }).pipe(
+          Effect.flatMap((shouldRequeue) =>
+            shouldRequeue ? TxQueue.offer(queue, key).pipe(Effect.asVoid) : Effect.void,
+          ),
         ),
       );
 
-    yield* TxQueue.take(queue).pipe(
+    yield* Effect.transaction(TxQueue.take(queue)).pipe(
       Effect.flatMap((key) =>
-        TxRef.modify(stateRef, (state) => {
-          const queuedKeys = new Set(state.queuedKeys);
-          queuedKeys.delete(key);
+        Effect.transaction(
+          TxRef.modify(stateRef, (state) => {
+            const queuedKeys = new Set(state.queuedKeys);
+            queuedKeys.delete(key);
 
-          const value = state.latestByKey.get(key);
-          if (value === undefined) {
-            return [null, { ...state, queuedKeys }] as const;
-          }
+            const value = state.latestByKey.get(key);
+            if (value === undefined) {
+              return [null, { ...state, queuedKeys }] as const;
+            }
 
-          const latestByKey = new Map(state.latestByKey);
-          latestByKey.delete(key);
-          const activeKeys = new Set(state.activeKeys);
-          activeKeys.add(key);
+            const latestByKey = new Map(state.latestByKey);
+            latestByKey.delete(key);
+            const activeKeys = new Set(state.activeKeys);
+            activeKeys.add(key);
 
-          return [
-            { key, value } as const,
-            { ...state, latestByKey, queuedKeys, activeKeys },
-          ] as const;
-        }).pipe(Effect.tx),
+            return [
+              { key, value } as const,
+              { ...state, latestByKey, queuedKeys, activeKeys },
+            ] as const;
+          }),
+        ),
       ),
       Effect.flatMap((item) =>
         item === null
@@ -107,33 +117,36 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
     );
 
     const enqueue: KeyedCoalescingWorker<K, V>["enqueue"] = (key, value) =>
-      TxRef.modify(stateRef, (state) => {
-        const latestByKey = new Map(state.latestByKey);
-        const existing = latestByKey.get(key);
-        latestByKey.set(key, existing === undefined ? value : options.merge(existing, value));
+      Effect.transaction(
+        TxRef.modify(stateRef, (state) => {
+          const latestByKey = new Map(state.latestByKey);
+          const existing = latestByKey.get(key);
+          latestByKey.set(key, existing === undefined ? value : options.merge(existing, value));
 
-        if (state.queuedKeys.has(key) || state.activeKeys.has(key)) {
-          return [false, { ...state, latestByKey }] as const;
-        }
+          if (state.queuedKeys.has(key) || state.activeKeys.has(key)) {
+            return [false, { ...state, latestByKey }] as const;
+          }
 
-        const queuedKeys = new Set(state.queuedKeys);
-        queuedKeys.add(key);
-        return [true, { ...state, latestByKey, queuedKeys }] as const;
-      }).pipe(
-        Effect.flatMap((shouldOffer) => (shouldOffer ? TxQueue.offer(queue, key) : Effect.void)),
-        Effect.tx,
-        Effect.asVoid,
+          const queuedKeys = new Set(state.queuedKeys);
+          queuedKeys.add(key);
+          return [true, { ...state, latestByKey, queuedKeys }] as const;
+        }).pipe(
+          Effect.flatMap((shouldOffer) =>
+            shouldOffer ? TxQueue.offer(queue, key).pipe(Effect.asVoid) : Effect.void,
+          ),
+        ),
       );
 
     const drainKey: KeyedCoalescingWorker<K, V>["drainKey"] = (key) =>
-      TxRef.get(stateRef).pipe(
-        Effect.tap((state) =>
-          state.latestByKey.has(key) || state.queuedKeys.has(key) || state.activeKeys.has(key)
-            ? Effect.txRetry
-            : Effect.void,
+      Effect.transaction(
+        TxRef.get(stateRef).pipe(
+          Effect.tap((state) =>
+            state.latestByKey.has(key) || state.queuedKeys.has(key) || state.activeKeys.has(key)
+              ? Effect.retryTransaction
+              : Effect.void,
+          ),
+          Effect.asVoid,
         ),
-        Effect.asVoid,
-        Effect.tx,
       );
 
     return { enqueue, drainKey } satisfies KeyedCoalescingWorker<K, V>;

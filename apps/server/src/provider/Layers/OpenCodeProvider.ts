@@ -109,7 +109,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           installed: true,
           version: null,
           status: "ready",
-          authStatus: "unknown",
+          auth: { status: "unknown" },
         },
       });
     }
@@ -130,7 +130,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           installed: false,
           version: null,
           status: "error",
-          authStatus: "unknown",
+          auth: { status: "unknown" },
           message: isCommandMissingCause(error)
             ? "OpenCode CLI (`opencode`) is not installed or not on PATH."
             : `Failed to execute OpenCode CLI health check: ${error instanceof Error ? error.message : String(error)}.`,
@@ -148,7 +148,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           installed: true,
           version: null,
           status: "warning",
-          authStatus: "unknown",
+          auth: { status: "unknown" },
           message: "OpenCode CLI is installed but did not respond before the health-check timeout.",
         },
       });
@@ -169,7 +169,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           installed: true,
           version: parsedVersion,
           status: "warning",
-          authStatus: "unknown",
+          auth: { status: "unknown" },
           message: detail
             ? `OpenCode CLI is installed but failed to run. ${detail}`
             : "OpenCode CLI is installed but failed to run.",
@@ -186,7 +186,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
         installed: true,
         version: parsedVersion,
         status: "ready",
-        authStatus: "unknown",
+        auth: { status: "unknown" },
         message: "OpenCode CLI is installed and reachable.",
       },
     });

@@ -114,7 +114,7 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
     installed: true,
     version: "1.0.0",
     status: "ready",
-    authStatus: "unknown",
+    auth: { status: "unknown" },
     checkedAt: new Date().toISOString(),
     models: [
       {

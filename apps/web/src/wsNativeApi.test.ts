@@ -109,7 +109,7 @@ const defaultProviders: ReadonlyArray<ServerProvider> = [
     installed: true,
     version: "1.0.0",
     status: "ready",
-    authStatus: "unknown",
+    auth: { status: "unknown" },
     checkedAt: "2026-01-01T00:00:00.000Z",
     models: [],
   },

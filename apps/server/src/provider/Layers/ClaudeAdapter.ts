@@ -2380,7 +2380,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         existingResumeSessionId === undefined ? yield* Random.nextUUIDv4 : undefined;
       const sessionId = existingResumeSessionId ?? newSessionId;
 
-      const services = yield* Effect.services();
+      const services = yield* Effect.services<never>();
       const runFork = Effect.runForkWith(services);
       const runPromise = Effect.runPromiseWith(services);
 

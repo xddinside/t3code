@@ -19,7 +19,7 @@
     "build": "node scripts/cli.ts build",
     "start": "node dist/index.mjs",
     "prepare": "effect-language-service patch",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run"
   },
   "dependencies": {
