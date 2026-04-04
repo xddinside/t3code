@@ -996,6 +996,34 @@ describe("deriveTimelineEntries", () => {
       }),
     ).toBe("assistant-final");
   });
+
+  it("hides empty assistant rows when the same turn later has visible assistant text", () => {
+    const turnId = TurnId.makeUnsafe("turn-1");
+    const entries = deriveTimelineEntries(
+      [
+        {
+          id: MessageId.makeUnsafe("assistant-empty"),
+          role: "assistant",
+          text: "",
+          turnId,
+          createdAt: "2026-02-23T00:00:01.000Z",
+          streaming: false,
+        },
+        {
+          id: MessageId.makeUnsafe("assistant-final"),
+          role: "assistant",
+          text: "final answer",
+          turnId,
+          createdAt: "2026-02-23T00:00:02.000Z",
+          streaming: false,
+        },
+      ],
+      [],
+      [],
+    );
+
+    expect(entries.map((entry) => entry.id)).toEqual(["assistant-final"]);
+  });
 });
 
 describe("deriveWorkLogEntries context window handling", () => {

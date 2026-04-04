@@ -830,7 +830,28 @@ export function deriveTimelineEntries(
   proposedPlans: ProposedPlan[],
   workEntries: WorkLogEntry[],
 ): TimelineEntry[] {
-  const messageRows: TimelineEntry[] = messages.map((message) => ({
+  const nonEmptyAssistantTurnIds = new Set(
+    messages.flatMap((message) =>
+      message.role === "assistant" &&
+      typeof message.turnId === "string" &&
+      message.text.trim().length > 0
+        ? [message.turnId]
+        : [],
+    ),
+  );
+  const visibleMessages = messages.filter((message) => {
+    if (
+      message.role !== "assistant" ||
+      message.streaming ||
+      typeof message.turnId !== "string" ||
+      message.text.trim().length > 0
+    ) {
+      return true;
+    }
+    return !nonEmptyAssistantTurnIds.has(message.turnId);
+  });
+
+  const messageRows: TimelineEntry[] = visibleMessages.map((message) => ({
     id: message.id,
     kind: "message",
     createdAt: message.createdAt,

@@ -12,6 +12,7 @@ import {
   clearPromotedDraftThread,
   clearPromotedDraftThreads,
   type ComposerImageAttachment,
+  deriveEffectiveComposerModelState,
   useComposerDraftStore,
 } from "./composerDraftStore";
 import { removeLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
@@ -21,6 +22,8 @@ import {
   type TerminalContextDraft,
 } from "./lib/terminalContext";
 import { createDebouncedStorage } from "./lib/storage";
+import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import type { ServerProvider } from "@t3tools/contracts";
 
 function makeImage(input: {
   id: string;
@@ -94,6 +97,78 @@ function modelSelection(
 function providerModelOptions(options: ProviderModelOptions): ProviderModelOptions {
   return options;
 }
+
+const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
+  {
+    provider: "codex",
+    enabled: true,
+    installed: true,
+    version: "1.0.0",
+    status: "ready",
+    auth: { status: "authenticated" },
+    checkedAt: "2026-03-13T12:00:00.000Z",
+    models: [
+      {
+        slug: "gpt-5.4",
+        name: "GPT-5.4",
+        isCustom: false,
+        capabilities: {
+          reasoningEffortLevels: [],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+    ],
+  },
+  {
+    provider: "claudeAgent",
+    enabled: true,
+    installed: true,
+    version: "1.0.0",
+    status: "ready",
+    auth: { status: "authenticated" },
+    checkedAt: "2026-03-13T12:00:00.000Z",
+    models: [
+      {
+        slug: "claude-sonnet-4-6",
+        name: "Claude Sonnet 4.6",
+        isCustom: false,
+        capabilities: {
+          reasoningEffortLevels: [],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+    ],
+  },
+  {
+    provider: "opencode",
+    enabled: true,
+    installed: true,
+    version: "1.0.0",
+    status: "ready",
+    auth: { status: "authenticated" },
+    checkedAt: "2026-03-13T12:00:00.000Z",
+    models: [
+      {
+        slug: "minimax-m2.5-free",
+        name: "MiniMax M2.5 Free",
+        isCustom: false,
+        capabilities: {
+          reasoningEffortLevels: [],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+    ],
+  },
+];
 
 describe("composerDraftStore addImages", () => {
   const threadId = ThreadId.makeUnsafe("thread-dedupe");
@@ -177,6 +252,24 @@ describe("composerDraftStore addImages", () => {
     const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
     expect(draft?.images.map((image) => image.id)).toEqual(["img-shared"]);
     expect(revokeSpy).not.toHaveBeenCalledWith("blob:shared");
+  });
+});
+
+describe("deriveEffectiveComposerModelState", () => {
+  it("falls back to the selected provider default instead of carrying a model from another provider", () => {
+    const result = deriveEffectiveComposerModelState({
+      draft: null,
+      providers: TEST_PROVIDERS,
+      selectedProvider: "opencode",
+      threadModelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      projectModelSelection: null,
+      settings: DEFAULT_UNIFIED_SETTINGS,
+    });
+
+    expect(result.selectedModel).toBe("minimax-m2.5-free");
   });
 });
 

@@ -220,6 +220,35 @@ describe("store read model sync", () => {
     expect(next.threads[0]?.modelSelection.model).toBe("claude-sonnet-4-6");
   });
 
+  it("preserves opencode as the active session provider", () => {
+    const initialState = makeState(makeThread());
+    const readModel = makeReadModel(
+      makeReadModelThread({
+        modelSelection: {
+          provider: "opencode",
+          model: "minimax-m2.5-free",
+        },
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "opencode",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: "2026-02-27T00:00:00.000Z",
+        },
+      }),
+    );
+
+    const next = syncServerReadModel(initialState, readModel);
+
+    expect(next.threads[0]?.session?.provider).toBe("opencode");
+    expect(next.threads[0]?.modelSelection).toEqual({
+      provider: "opencode",
+      model: "minimax-m2.5-free",
+    });
+  });
+
   it("preserves project and thread updatedAt timestamps from the read model", () => {
     const initialState = makeState(makeThread());
     const readModel = makeReadModel(
