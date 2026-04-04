@@ -9,7 +9,7 @@ import {
   Undo2Icon,
   XIcon,
 } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PROVIDER_DISPLAY_NAMES,
@@ -19,7 +19,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
-import { buildModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
+import { normalizeModelSlug } from "@t3tools/shared/model";
 import { Equal } from "effect";
 import { APP_VERSION } from "../../branding";
 import {
@@ -40,7 +40,6 @@ import {
   setDesktopUpdateStateQueryData,
   useDesktopUpdateState,
 } from "../../lib/desktopUpdateReactQuery";
-import { serverConfigQueryOptions, serverQueryKeys } from "../../lib/serverReactQuery";
 import {
   MAX_CUSTOM_MODEL_LENGTH,
   getCustomModelOptionsByProvider,
@@ -59,6 +58,12 @@ import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ProjectFavicon } from "../ProjectFavicon";
+import {
+  useServerAvailableEditors,
+  useServerKeybindingsConfigPath,
+  useServerObservability,
+  useServerProviders,
+} from "../../rpc/serverState";
 
 const THEME_OPTIONS = [
   {
@@ -80,8 +85,6 @@ const TIMESTAMP_FORMAT_LABELS = {
   "12-hour": "12-hour",
   "24-hour": "24-hour",
 } as const;
-
-const EMPTY_SERVER_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 
 type InstallProviderSettings = {
   provider: ProviderKind;
@@ -108,16 +111,6 @@ const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     title: "Claude",
     binaryPlaceholder: "Claude binary path",
     binaryDescription: "Path to the Claude binary",
-  },
-  {
-    provider: "opencode",
-    title: "OpenCode",
-    binaryPlaceholder: "OpenCode binary path",
-    binaryDescription: (
-      <>
-        Leave blank to use <code>opencode</code> from your PATH.
-      </>
-    ),
   },
 ] as const;
 
@@ -526,9 +519,13 @@ export function GeneralSettingsPanel() {
   const { theme, setTheme } = useTheme();
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
-  const serverConfigQuery = useQuery(serverConfigQueryOptions());
-  const [isOpeningKeybindings, setIsOpeningKeybindings] = useState(false);
-  const [openKeybindingsError, setOpenKeybindingsError] = useState<string | null>(null);
+  const [openingPathByTarget, setOpeningPathByTarget] = useState({
+    keybindings: false,
+    logsDirectory: false,
+  });
+  const [openPathErrorByTarget, setOpenPathErrorByTarget] = useState<
+    Partial<Record<"keybindings" | "logsDirectory", string | null>>
+  >({});
   const [openProviderDetails, setOpenProviderDetails] = useState<Record<ProviderKind, boolean>>({
     codex: Boolean(
       settings.providers.codex.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.codex.binaryPath ||
@@ -540,25 +537,18 @@ export function GeneralSettingsPanel() {
         DEFAULT_UNIFIED_SETTINGS.providers.claudeAgent.binaryPath ||
       settings.providers.claudeAgent.customModels.length > 0,
     ),
-    opencode: Boolean(
-      settings.providers.opencode.binaryPath !==
-        DEFAULT_UNIFIED_SETTINGS.providers.opencode.binaryPath ||
-      settings.providers.opencode.customModels.length > 0,
-    ),
   });
   const [customModelInputByProvider, setCustomModelInputByProvider] = useState<
     Record<ProviderKind, string>
   >({
     codex: "",
     claudeAgent: "",
-    opencode: "",
   });
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
     Partial<Record<ProviderKind, string | null>>
   >({});
   const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
   const refreshingRef = useRef(false);
-  const queryClient = useQueryClient();
   const modelListRefs = useRef<Partial<Record<ProviderKind, HTMLDivElement | null>>>({});
   const refreshProviders = useCallback(() => {
     if (refreshingRef.current) return;
@@ -566,7 +556,6 @@ export function GeneralSettingsPanel() {
     setIsRefreshingProviders(true);
     void ensureNativeApi()
       .server.refreshProviders()
-      .then(() => queryClient.invalidateQueries({ queryKey: serverQueryKeys.config() }))
       .catch((error: unknown) => {
         console.warn("Failed to refresh providers", error);
       })
@@ -574,12 +563,25 @@ export function GeneralSettingsPanel() {
         refreshingRef.current = false;
         setIsRefreshingProviders(false);
       });
-  }, [queryClient]);
+  }, []);
 
-  const keybindingsConfigPath = serverConfigQuery.data?.keybindingsConfigPath ?? null;
-  const availableEditors = serverConfigQuery.data?.availableEditors;
-  const serverProviders = serverConfigQuery.data?.providers ?? EMPTY_SERVER_PROVIDERS;
+  const keybindingsConfigPath = useServerKeybindingsConfigPath();
+  const availableEditors = useServerAvailableEditors();
+  const observability = useServerObservability();
+  const serverProviders = useServerProviders();
   const codexHomePath = settings.providers.codex.homePath;
+  const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
+  const diagnosticsDescription = (() => {
+    const exports: string[] = [];
+    if (observability?.otlpTracesEnabled && observability.otlpTracesUrl) {
+      exports.push(`traces to ${observability.otlpTracesUrl}`);
+    }
+    if (observability?.otlpMetricsEnabled && observability.otlpMetricsUrl) {
+      exports.push(`metrics to ${observability.otlpMetricsUrl}`);
+    }
+    const mode = observability?.localTracingEnabled ? "Local trace file" : "Terminal logs only";
+    return exports.length > 0 ? `${mode}. OTLP exporting ${exports.join(" and ")}.` : `${mode}.`;
+  })();
 
   const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
   const textGenProvider = textGenerationModelSelection.provider;
@@ -596,27 +598,49 @@ export function GeneralSettingsPanel() {
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
 
+  const openInPreferredEditor = useCallback(
+    (target: "keybindings" | "logsDirectory", path: string | null, failureMessage: string) => {
+      if (!path) return;
+      setOpenPathErrorByTarget((existing) => ({ ...existing, [target]: null }));
+      setOpeningPathByTarget((existing) => ({ ...existing, [target]: true }));
+
+      const editor = resolveAndPersistPreferredEditor(availableEditors ?? []);
+      if (!editor) {
+        setOpenPathErrorByTarget((existing) => ({
+          ...existing,
+          [target]: "No available editors found.",
+        }));
+        setOpeningPathByTarget((existing) => ({ ...existing, [target]: false }));
+        return;
+      }
+
+      void ensureNativeApi()
+        .shell.openInEditor(path, editor)
+        .catch((error) => {
+          setOpenPathErrorByTarget((existing) => ({
+            ...existing,
+            [target]: error instanceof Error ? error.message : failureMessage,
+          }));
+        })
+        .finally(() => {
+          setOpeningPathByTarget((existing) => ({ ...existing, [target]: false }));
+        });
+    },
+    [availableEditors],
+  );
+
   const openKeybindingsFile = useCallback(() => {
-    if (!keybindingsConfigPath) return;
-    setOpenKeybindingsError(null);
-    setIsOpeningKeybindings(true);
-    const editor = resolveAndPersistPreferredEditor(availableEditors ?? []);
-    if (!editor) {
-      setOpenKeybindingsError("No available editors found.");
-      setIsOpeningKeybindings(false);
-      return;
-    }
-    void ensureNativeApi()
-      .shell.openInEditor(keybindingsConfigPath, editor)
-      .catch((error) => {
-        setOpenKeybindingsError(
-          error instanceof Error ? error.message : "Unable to open keybindings file.",
-        );
-      })
-      .finally(() => {
-        setIsOpeningKeybindings(false);
-      });
-  }, [availableEditors, keybindingsConfigPath]);
+    openInPreferredEditor("keybindings", keybindingsConfigPath, "Unable to open keybindings file.");
+  }, [keybindingsConfigPath, openInPreferredEditor]);
+
+  const openLogsDirectory = useCallback(() => {
+    openInPreferredEditor("logsDirectory", logsDirectoryPath, "Unable to open logs folder.");
+  }, [logsDirectoryPath, openInPreferredEditor]);
+
+  const openKeybindingsError = openPathErrorByTarget.keybindings ?? null;
+  const openDiagnosticsError = openPathErrorByTarget.logsDirectory ?? null;
+  const isOpeningKeybindings = openingPathByTarget.keybindings;
+  const isOpeningLogsDirectory = openingPathByTarget.logsDirectory;
 
   const addCustomModel = useCallback(
     (provider: ProviderKind) => {
@@ -1030,11 +1054,11 @@ export function GeneralSettingsPanel() {
                     textGenerationModelSelection: resolveAppModelSelectionState(
                       {
                         ...settings,
-                        textGenerationModelSelection: buildModelSelection(
-                          textGenProvider,
-                          textGenModel,
-                          nextOptions,
-                        ),
+                        textGenerationModelSelection: {
+                          provider: textGenProvider,
+                          model: textGenModel,
+                          ...(nextOptions ? { options: nextOptions } : {}),
+                        },
                       },
                       serverProviders,
                     ),
@@ -1425,6 +1449,30 @@ export function GeneralSettingsPanel() {
             description="Current version of the application."
           />
         )}
+        <SettingsRow
+          title="Diagnostics"
+          description={diagnosticsDescription}
+          status={
+            <>
+              <span className="block break-all font-mono text-[11px] text-foreground">
+                {logsDirectoryPath ?? "Resolving logs directory..."}
+              </span>
+              {openDiagnosticsError ? (
+                <span className="mt-1 block text-destructive">{openDiagnosticsError}</span>
+              ) : null}
+            </>
+          }
+          control={
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={!logsDirectoryPath || isOpeningLogsDirectory}
+              onClick={openLogsDirectory}
+            >
+              {isOpeningLogsDirectory ? "Opening..." : "Open logs folder"}
+            </Button>
+          }
+        />
       </SettingsSection>
     </SettingsPageContainer>
   );

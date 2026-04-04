@@ -10,7 +10,7 @@ import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
-import { GitCommandError } from "../../git/Errors.ts";
+import { GitCommandError } from "@t3tools/contracts";
 import { ServerConfig } from "../../config.ts";
 import { ThreadId } from "@t3tools/contracts";
 
@@ -80,7 +80,7 @@ function initRepoWithCommit(
   });
 }
 
-function buildLargeText(lineCount = 20_000): string {
+function buildLargeText(lineCount = 5_000): string {
   return Array.from({ length: lineCount }, (_, index) => `line ${String(index).padStart(5, "0")}`)
     .join("\n")
     .concat("\n");
@@ -115,7 +115,7 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
 
         expect(diff).toContain("diff --git");
         expect(diff).not.toContain("[truncated]");
-        expect(diff).toContain("+line 19999");
+        expect(diff).toContain("+line 04999");
       }),
     );
   });

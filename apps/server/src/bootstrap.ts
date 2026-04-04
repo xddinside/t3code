@@ -156,12 +156,7 @@ const makeDirectBootstrapStream = (fd: number): Readable => {
 
 const isBootstrapFdPathDuplicationError = Predicate.compose(
   Predicate.hasProperty("code"),
-  (_) =>
-    _.code === "ENXIO" ||
-    _.code === "EINVAL" ||
-    _.code === "EPERM" ||
-    _.code === "ENOENT" ||
-    _.code === "EBADF",
+  (_) => _.code === "ENXIO" || _.code === "EINVAL" || _.code === "EPERM",
 );
 
 export function resolveFdPath(

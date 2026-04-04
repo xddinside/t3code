@@ -1,7 +1,6 @@
 import {
   type ClaudeModelOptions,
   type CodexModelOptions,
-  type OpenCodeModelOptions,
   type ProviderKind,
   type ProviderModelOptions,
   type ServerProviderModel,
@@ -53,9 +52,6 @@ function getRawEffort(
   if (provider === "codex") {
     return trimOrNull((modelOptions as CodexModelOptions | undefined)?.reasoningEffort);
   }
-  if (provider === "opencode") {
-    return trimOrNull((modelOptions as OpenCodeModelOptions | undefined)?.variant);
-  }
   return trimOrNull((modelOptions as ClaudeModelOptions | undefined)?.effort);
 }
 
@@ -76,12 +72,6 @@ function buildNextOptions(
 ): ProviderOptions {
   if (provider === "codex") {
     return { ...(modelOptions as CodexModelOptions | undefined), ...patch } as CodexModelOptions;
-  }
-  if (provider === "opencode") {
-    return {
-      ...(modelOptions as OpenCodeModelOptions | undefined),
-      ...patch,
-    } as OpenCodeModelOptions;
   }
   return { ...(modelOptions as ClaudeModelOptions | undefined), ...patch } as ClaudeModelOptions;
 }
@@ -213,8 +203,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         const stripped = prompt.replace(/^Ultrathink:\s*/i, "");
         onPromptChange(stripped);
       }
-      const effortKey =
-        provider === "codex" ? "reasoningEffort" : provider === "opencode" ? "variant" : "effort";
+      const effortKey = provider === "codex" ? "reasoningEffort" : "effort";
       updateModelOptions(
         buildNextOptions(provider, modelOptions, { [effortKey]: nextOption.value }),
       );

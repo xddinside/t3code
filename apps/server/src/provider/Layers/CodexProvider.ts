@@ -46,7 +46,8 @@ import {
 } from "../codexAccount";
 import { probeCodexAccount } from "../codexAppServer";
 import { CodexProvider } from "../Services/CodexProvider";
-import { ServerSettingsError, ServerSettingsService } from "../../serverSettings";
+import { ServerSettingsService } from "../../serverSettings";
+import { ServerSettingsError } from "@t3tools/contracts";
 
 const PROVIDER = "codex" as const;
 const OPENAI_AUTH_PROVIDERS = new Set(["openai"]);
@@ -305,21 +306,20 @@ const probeCodexCapabilities = (input: {
     }),
   );
 
-const runCodexCommand = (args: ReadonlyArray<string>) =>
-  Effect.gen(function* () {
-    const settingsService = yield* ServerSettingsService;
-    const codexSettings = yield* settingsService.getSettings.pipe(
-      Effect.map((settings) => settings.providers.codex),
-    );
-    const command = ChildProcess.make(codexSettings.binaryPath, [...args], {
-      shell: process.platform === "win32",
-      env: {
-        ...process.env,
-        ...(codexSettings.homePath ? { CODEX_HOME: codexSettings.homePath } : {}),
-      },
-    });
-    return yield* spawnAndCollect(codexSettings.binaryPath, command);
+const runCodexCommand = Effect.fn("runCodexCommand")(function* (args: ReadonlyArray<string>) {
+  const settingsService = yield* ServerSettingsService;
+  const codexSettings = yield* settingsService.getSettings.pipe(
+    Effect.map((settings) => settings.providers.codex),
+  );
+  const command = ChildProcess.make(codexSettings.binaryPath, [...args], {
+    shell: process.platform === "win32",
+    env: {
+      ...process.env,
+      ...(codexSettings.homePath ? { CODEX_HOME: codexSettings.homePath } : {}),
+    },
   });
+  return yield* spawnAndCollect(codexSettings.binaryPath, command);
+});
 
 export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(function* (
   resolveAccount?: (input: {

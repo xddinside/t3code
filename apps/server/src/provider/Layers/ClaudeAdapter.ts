@@ -533,7 +533,7 @@ function buildUserMessage(input: {
     parent_tool_use_id: null,
     message: {
       role: "user",
-      content: input.sdkContent,
+      content: input.sdkContent as unknown as SDKUserMessage["message"]["content"],
     },
   } as SDKUserMessage;
 }
@@ -2380,7 +2380,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         existingResumeSessionId === undefined ? yield* Random.nextUUIDv4 : undefined;
       const sessionId = existingResumeSessionId ?? newSessionId;
 
-      const services = yield* Effect.services<never>();
+      const services = yield* Effect.services();
       const runFork = Effect.runForkWith(services);
       const runPromise = Effect.runPromiseWith(services);
 

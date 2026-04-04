@@ -17,7 +17,6 @@ import {
   syncServerReadModel,
   type AppState,
 } from "./store";
-import { derivePendingUserInputs } from "./session-logic";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
@@ -48,6 +47,9 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
 }
 
 function makeState(thread: Thread): AppState {
+  const threadIdsByProjectId: AppState["threadIdsByProjectId"] = {
+    [thread.projectId]: [thread.id],
+  };
   return {
     projects: [
       {
@@ -62,6 +64,8 @@ function makeState(thread: Thread): AppState {
       },
     ],
     threads: [thread],
+    sidebarThreadsById: {},
+    threadIdsByProjectId,
     bootstrapComplete: true,
   };
 }
@@ -272,6 +276,8 @@ describe("store read model sync", () => {
         },
       ],
       threads: [],
+      sidebarThreadsById: {},
+      threadIdsByProjectId: {},
       bootstrapComplete: true,
     };
     const readModel: OrchestrationReadModel = {
@@ -300,127 +306,6 @@ describe("store read model sync", () => {
     const next = syncServerReadModel(initialState, readModel);
 
     expect(next.projects.map((project) => project.id)).toEqual([project1, project2, project3]);
-  });
-});
-
-describe("store user-input submit handling", () => {
-  it("persists optimistic user-input resolution from submit requests", () => {
-    const thread = makeThread({
-      activities: [
-        {
-          id: EventId.makeUnsafe("activity-user-input-open"),
-          tone: "info",
-          kind: "user-input.requested",
-          summary: "User input requested",
-          payload: {
-            requestId: "req-user-input-1",
-            questions: [
-              {
-                id: "opencode-req-user-input-1-1",
-                header: "Question",
-                question: "Pick one",
-                options: [{ label: "Option A", description: "Choose A" }],
-              },
-            ],
-          },
-          turnId: null,
-          createdAt: "2026-02-27T00:00:01.000Z",
-        },
-      ],
-    });
-
-    const next = applyOrchestrationEvent(
-      makeState(thread),
-      makeEvent("thread.user-input-response-requested", {
-        threadId: thread.id,
-        requestId: "req-user-input-1" as never,
-        answers: {
-          "opencode-req-user-input-1-1": "Option A",
-        },
-        createdAt: "2026-02-27T00:00:02.000Z",
-      }),
-    );
-
-    expect(derivePendingUserInputs(next.threads[0]?.activities ?? [])).toEqual([]);
-    expect(next.threads[0]?.activities.at(-1)).toMatchObject({
-      kind: "user-input.resolved",
-      summary: "User input submitted",
-      payload: {
-        requestId: "req-user-input-1",
-        answers: {
-          "opencode-req-user-input-1-1": "Option A",
-        },
-        optimistic: true,
-      },
-    });
-  });
-
-  it("reopens the prompt when a submitted user-input response later fails", () => {
-    const thread = makeThread({
-      activities: [
-        {
-          id: EventId.makeUnsafe("activity-user-input-open"),
-          tone: "info",
-          kind: "user-input.requested",
-          summary: "User input requested",
-          payload: {
-            requestId: "req-user-input-1",
-            questions: [
-              {
-                id: "opencode-req-user-input-1-1",
-                header: "Question",
-                question: "Pick one",
-                options: [{ label: "Option A", description: "Choose A" }],
-              },
-            ],
-          },
-          turnId: null,
-          createdAt: "2026-02-27T00:00:01.000Z",
-        },
-      ],
-    });
-
-    const submitted = applyOrchestrationEvent(
-      makeState(thread),
-      makeEvent("thread.user-input-response-requested", {
-        threadId: thread.id,
-        requestId: "req-user-input-1" as never,
-        answers: {
-          "opencode-req-user-input-1-1": "Option A",
-        },
-        createdAt: "2026-02-27T00:00:02.000Z",
-      }),
-    );
-
-    const failed = applyOrchestrationEvent(
-      submitted,
-      makeEvent("thread.activity-appended", {
-        threadId: thread.id,
-        activity: {
-          id: EventId.makeUnsafe("activity-user-input-failed"),
-          tone: "error",
-          kind: "provider.user-input.respond.failed",
-          summary: "Provider user input response failed",
-          payload: {
-            requestId: "req-user-input-1",
-            detail: "submit failed",
-          },
-          turnId: null,
-          createdAt: "2026-02-27T00:00:03.000Z",
-        },
-      }),
-    );
-
-    expect(
-      derivePendingUserInputs(failed.threads[0]?.activities ?? []).map((entry) => entry.requestId),
-    ).toEqual(["req-user-input-1"]);
-    expect(
-      failed.threads[0]?.activities.some(
-        (activity) =>
-          activity.kind === "user-input.resolved" &&
-          (activity.payload as Record<string, unknown>)?.optimistic === true,
-      ),
-    ).toBe(false);
   });
 });
 
@@ -483,6 +368,8 @@ describe("incremental orchestration updates", () => {
         },
       ],
       threads: [],
+      sidebarThreadsById: {},
+      threadIdsByProjectId: {},
       bootstrapComplete: true,
     };
 
@@ -506,6 +393,70 @@ describe("incremental orchestration updates", () => {
     expect(next.projects[0]?.id).toBe(recreatedProjectId);
     expect(next.projects[0]?.cwd).toBe("/tmp/project");
     expect(next.projects[0]?.name).toBe("Project Recreated");
+  });
+
+  it("removes stale project index entries when thread.created recreates a thread under a new project", () => {
+    const originalProjectId = ProjectId.makeUnsafe("project-1");
+    const recreatedProjectId = ProjectId.makeUnsafe("project-2");
+    const threadId = ThreadId.makeUnsafe("thread-1");
+    const thread = makeThread({
+      id: threadId,
+      projectId: originalProjectId,
+    });
+    const state: AppState = {
+      projects: [
+        {
+          id: originalProjectId,
+          name: "Project 1",
+          cwd: "/tmp/project-1",
+          defaultModelSelection: {
+            provider: "codex",
+            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          },
+          scripts: [],
+        },
+        {
+          id: recreatedProjectId,
+          name: "Project 2",
+          cwd: "/tmp/project-2",
+          defaultModelSelection: {
+            provider: "codex",
+            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          },
+          scripts: [],
+        },
+      ],
+      threads: [thread],
+      sidebarThreadsById: {},
+      threadIdsByProjectId: {
+        [originalProjectId]: [threadId],
+      },
+      bootstrapComplete: true,
+    };
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.created", {
+        threadId,
+        projectId: recreatedProjectId,
+        title: "Recovered thread",
+        modelSelection: {
+          provider: "codex",
+          model: DEFAULT_MODEL_BY_PROVIDER.codex,
+        },
+        runtimeMode: DEFAULT_RUNTIME_MODE,
+        interactionMode: DEFAULT_INTERACTION_MODE,
+        branch: null,
+        worktreePath: null,
+        createdAt: "2026-02-27T00:00:01.000Z",
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+    );
+
+    expect(next.threads).toHaveLength(1);
+    expect(next.threads[0]?.projectId).toBe(recreatedProjectId);
+    expect(next.threadIdsByProjectId[originalProjectId]).toBeUndefined();
+    expect(next.threadIdsByProjectId[recreatedProjectId]).toEqual([threadId]);
   });
 
   it("updates only the affected thread for message events", () => {

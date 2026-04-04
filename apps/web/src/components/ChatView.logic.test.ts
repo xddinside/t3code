@@ -3,11 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../store";
 
 import {
+  MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   buildExpiredTerminalContextToastCopy,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
-  shouldBlockComposerSubmit,
+  reconcileMountedTerminalThreadIds,
   waitForStartedServerThread,
 } from "./ChatView.logic";
 
@@ -76,27 +77,95 @@ describe("buildExpiredTerminalContextToastCopy", () => {
   });
 });
 
-describe("shouldBlockComposerSubmit", () => {
-  it("allows question replies while the turn is still marked busy", () => {
+describe("reconcileMountedTerminalThreadIds", () => {
+  it("keeps previously mounted open threads and adds the active open thread", () => {
     expect(
-      shouldBlockComposerSubmit({
-        hasPendingUserInput: true,
-        isSendBusy: true,
-        isConnecting: false,
-        sendInFlight: true,
+      reconcileMountedTerminalThreadIds({
+        currentThreadIds: [
+          ThreadId.makeUnsafe("thread-hidden"),
+          ThreadId.makeUnsafe("thread-stale"),
+        ],
+        openThreadIds: [ThreadId.makeUnsafe("thread-hidden"), ThreadId.makeUnsafe("thread-active")],
+        activeThreadId: ThreadId.makeUnsafe("thread-active"),
+        activeThreadTerminalOpen: true,
       }),
-    ).toBe(false);
+    ).toEqual([ThreadId.makeUnsafe("thread-hidden"), ThreadId.makeUnsafe("thread-active")]);
   });
 
-  it("blocks normal sends while the composer is busy", () => {
+  it("drops mounted threads once their terminal drawer is no longer open", () => {
     expect(
-      shouldBlockComposerSubmit({
-        hasPendingUserInput: false,
-        isSendBusy: true,
-        isConnecting: false,
-        sendInFlight: false,
+      reconcileMountedTerminalThreadIds({
+        currentThreadIds: [ThreadId.makeUnsafe("thread-closed")],
+        openThreadIds: [],
+        activeThreadId: ThreadId.makeUnsafe("thread-closed"),
+        activeThreadTerminalOpen: false,
       }),
-    ).toBe(true);
+    ).toEqual([]);
+  });
+
+  it("keeps only the most recently active hidden terminal threads", () => {
+    expect(
+      reconcileMountedTerminalThreadIds({
+        currentThreadIds: [
+          ThreadId.makeUnsafe("thread-1"),
+          ThreadId.makeUnsafe("thread-2"),
+          ThreadId.makeUnsafe("thread-3"),
+        ],
+        openThreadIds: [
+          ThreadId.makeUnsafe("thread-1"),
+          ThreadId.makeUnsafe("thread-2"),
+          ThreadId.makeUnsafe("thread-3"),
+          ThreadId.makeUnsafe("thread-4"),
+        ],
+        activeThreadId: ThreadId.makeUnsafe("thread-4"),
+        activeThreadTerminalOpen: true,
+        maxHiddenThreadCount: 2,
+      }),
+    ).toEqual([
+      ThreadId.makeUnsafe("thread-2"),
+      ThreadId.makeUnsafe("thread-3"),
+      ThreadId.makeUnsafe("thread-4"),
+    ]);
+  });
+
+  it("moves the active thread to the end so it is treated as most recently used", () => {
+    expect(
+      reconcileMountedTerminalThreadIds({
+        currentThreadIds: [
+          ThreadId.makeUnsafe("thread-a"),
+          ThreadId.makeUnsafe("thread-b"),
+          ThreadId.makeUnsafe("thread-c"),
+        ],
+        openThreadIds: [
+          ThreadId.makeUnsafe("thread-a"),
+          ThreadId.makeUnsafe("thread-b"),
+          ThreadId.makeUnsafe("thread-c"),
+        ],
+        activeThreadId: ThreadId.makeUnsafe("thread-a"),
+        activeThreadTerminalOpen: true,
+        maxHiddenThreadCount: 2,
+      }),
+    ).toEqual([
+      ThreadId.makeUnsafe("thread-b"),
+      ThreadId.makeUnsafe("thread-c"),
+      ThreadId.makeUnsafe("thread-a"),
+    ]);
+  });
+
+  it("defaults to the hidden mounted terminal cap", () => {
+    const currentThreadIds = Array.from(
+      { length: MAX_HIDDEN_MOUNTED_TERMINAL_THREADS + 2 },
+      (_, index) => ThreadId.makeUnsafe(`thread-${index + 1}`),
+    );
+
+    expect(
+      reconcileMountedTerminalThreadIds({
+        currentThreadIds,
+        openThreadIds: currentThreadIds,
+        activeThreadId: null,
+        activeThreadTerminalOpen: false,
+      }),
+    ).toEqual(currentThreadIds.slice(-MAX_HIDDEN_MOUNTED_TERMINAL_THREADS));
   });
 });
 

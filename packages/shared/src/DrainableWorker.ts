@@ -39,29 +39,30 @@ export const makeDrainableWorker = <A, E, R>(
   process: (item: A) => Effect.Effect<void, E, R>,
 ): Effect.Effect<DrainableWorker<A>, never, Scope.Scope | R> =>
   Effect.gen(function* () {
-    const queue = yield* Effect.acquireRelease(Effect.tx(TxQueue.unbounded<A>()), (queue) =>
-      Effect.tx(TxQueue.shutdown(queue)),
-    );
-    const outstanding = yield* Effect.tx(TxRef.make(0));
+    const queue = yield* Effect.acquireRelease(TxQueue.unbounded<A>(), TxQueue.shutdown);
+    const outstanding = yield* TxRef.make(0);
 
-    yield* Effect.tx(TxQueue.take(queue)).pipe(
+    yield* TxQueue.take(queue).pipe(
       Effect.tap((a) =>
-        Effect.ensuring(process(a), Effect.tx(TxRef.update(outstanding, (n) => n - 1))),
+        Effect.ensuring(
+          process(a),
+          TxRef.update(outstanding, (n) => n - 1),
+        ),
       ),
       Effect.forever,
       Effect.forkScoped,
     );
 
-    const drain: DrainableWorker<A>["drain"] = Effect.tx(
-      TxRef.get(outstanding).pipe(Effect.tap((n) => (n > 0 ? Effect.txRetry : Effect.void))),
+    const drain: DrainableWorker<A>["drain"] = TxRef.get(outstanding).pipe(
+      Effect.tap((n) => (n > 0 ? Effect.txRetry : Effect.void)),
+      Effect.tx,
     );
 
-    const enqueue = (element: A): Effect.Effect<void> =>
-      Effect.tx(
-        TxQueue.offer(queue, element).pipe(
-          Effect.tap(() => TxRef.update(outstanding, (n) => n + 1)),
-        ),
-      ).pipe(Effect.asVoid);
+    const enqueue = (element: A): Effect.Effect<boolean, never, never> =>
+      TxQueue.offer(queue, element).pipe(
+        Effect.tap(() => TxRef.update(outstanding, (n) => n + 1)),
+        Effect.tx,
+      );
 
     return { enqueue, drain } satisfies DrainableWorker<A>;
   });
