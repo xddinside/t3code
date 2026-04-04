@@ -207,6 +207,85 @@ export function trimOrNull<T extends string>(value: T | null | undefined): T | n
  * Expects `contextWindow` to already be resolved (via `resolveContextWindow`)
  * to the effective value, not stripped to `undefined` for defaults.
  */
+export function buildModelSelection(
+  provider: "codex",
+  model: string,
+  options?: CodexModelOptions,
+): Extract<ModelSelection, { provider: "codex" }>;
+export function buildModelSelection(
+  provider: "claudeAgent",
+  model: string,
+  options?: ClaudeModelOptions,
+): Extract<ModelSelection, { provider: "claudeAgent" }>;
+export function buildModelSelection(
+  provider: "opencode",
+  model: string,
+  options?: OpenCodeModelOptions,
+): Extract<ModelSelection, { provider: "opencode" }>;
+export function buildModelSelection(
+  provider: ProviderKind,
+  model: string,
+  options?: CodexModelOptions | ClaudeModelOptions | OpenCodeModelOptions,
+): ModelSelection;
+export function buildModelSelection(
+  provider: ProviderKind,
+  model: string,
+  options?: CodexModelOptions | ClaudeModelOptions | OpenCodeModelOptions,
+): ModelSelection {
+  switch (provider) {
+    case "codex":
+      return options === undefined
+        ? { provider, model }
+        : { provider, model, options: options as CodexModelOptions };
+    case "claudeAgent":
+      return options === undefined
+        ? { provider, model }
+        : { provider, model, options: options as ClaudeModelOptions };
+    case "opencode":
+      return options === undefined
+        ? { provider, model }
+        : { provider, model, options: options as OpenCodeModelOptions };
+  }
+}
+
+export function inferProviderForModel(
+  model: string | null | undefined,
+  fallback: ProviderKind = "codex",
+): ProviderKind {
+  const normalizedClaude = normalizeModelSlug(model, "claudeAgent");
+  if (normalizedClaude && hasKnownModelSlug("claudeAgent", normalizedClaude)) {
+    return "claudeAgent";
+  }
+
+  const normalizedCodex = normalizeModelSlug(model, "codex");
+  if (normalizedCodex && hasKnownModelSlug("codex", normalizedCodex)) {
+    return "codex";
+  }
+
+  const normalizedOpenCode = normalizeModelSlug(model, "opencode");
+  if (normalizedOpenCode && hasKnownModelSlug("opencode", normalizedOpenCode)) {
+    return "opencode";
+  }
+
+  if (typeof model === "string") {
+    const trimmed = model.trim();
+    if (trimmed.startsWith("claude-")) {
+      return "claudeAgent";
+    }
+    if (
+      trimmed === "big-pickle" ||
+      trimmed === "gpt-5-nano" ||
+      trimmed.startsWith("minimax-") ||
+      trimmed.startsWith("mimo-") ||
+      trimmed.startsWith("nemotron-") ||
+      trimmed.startsWith("qwen")
+    ) {
+      return "opencode";
+    }
+  }
+
+  return fallback;
+}
 export function resolveApiModelId(modelSelection: ModelSelection): string {
   switch (modelSelection.provider) {
     case "claudeAgent": {

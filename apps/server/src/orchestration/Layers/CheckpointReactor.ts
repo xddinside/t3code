@@ -63,6 +63,19 @@ function checkpointStatusFromRuntime(status: string | undefined): "ready" | "mis
 const serverCommandId = (tag: string): CommandId =>
   CommandId.makeUnsafe(`server:${tag}:${crypto.randomUUID()}`);
 
+const DISK_CAPACITY_ERROR_MARKERS = [
+  "disk quota exceeded",
+  "no space left on device",
+  "edquot",
+  "enospc",
+  "unknown system error -122",
+] as const;
+
+function isDiskCapacityIssue(detail: string): boolean {
+  const normalized = detail.toLowerCase();
+  return DISK_CAPACITY_ERROR_MARKERS.some((marker) => normalized.includes(marker));
+}
+
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const providerService = yield* ProviderService;
@@ -118,6 +131,26 @@ const make = Effect.gen(function* () {
       },
       createdAt: input.createdAt,
     });
+
+  const resolveSessionRuntimeForThread = Effect.fn("resolveSessionRuntimeForThread")(function* (
+  const reportCaptureFailure = (input: {
+    readonly threadId: ThreadId;
+    readonly turnId: TurnId | null;
+    readonly detail: string;
+    readonly createdAt: string;
+  }): Effect.Effect<void, OrchestrationDispatchError, never> => {
+    if (isDiskCapacityIssue(input.detail)) {
+      return Effect.logWarning(
+        "checkpoint capture failed due to local disk capacity issue; skipping thread activity",
+        {
+          threadId: input.threadId,
+          turnId: input.turnId,
+          detail: input.detail,
+        },
+      );
+    }
+    return appendCaptureFailureActivity(input).pipe(Effect.asVoid);
+  };
 
   const resolveSessionRuntimeForThread = Effect.fn("resolveSessionRuntimeForThread")(function* (
     threadId: ThreadId,
@@ -246,7 +279,7 @@ const make = Effect.gen(function* () {
           })),
         ),
         Effect.tapError((error) =>
-          appendCaptureFailureActivity({
+          reportCaptureFailure({
             threadId: input.threadId,
             turnId: input.turnId,
             detail: `Checkpoint captured, but turn diff summary is unavailable: ${error.message}`,
@@ -715,7 +748,7 @@ const make = Effect.gen(function* () {
     if (event.type === "thread.turn-diff-completed") {
       yield* captureCheckpointFromPlaceholder(event).pipe(
         Effect.catch((error) =>
-          appendCaptureFailureActivity({
+          reportCaptureFailure({
             threadId: event.payload.threadId,
             turnId: event.payload.turnId,
             detail: error.message,
@@ -738,7 +771,7 @@ const make = Effect.gen(function* () {
       const turnId = toTurnId(event.turnId);
       yield* captureCheckpointFromTurnCompletion(event).pipe(
         Effect.catch((error) =>
-          appendCaptureFailureActivity({
+          reportCaptureFailure({
             threadId: event.threadId,
             turnId,
             detail: error.message,

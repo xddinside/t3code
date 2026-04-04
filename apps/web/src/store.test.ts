@@ -17,6 +17,7 @@ import {
   syncServerReadModel,
   type AppState,
 } from "./store";
+import { derivePendingUserInputs } from "./session-logic";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
@@ -306,6 +307,127 @@ describe("store read model sync", () => {
     const next = syncServerReadModel(initialState, readModel);
 
     expect(next.projects.map((project) => project.id)).toEqual([project1, project2, project3]);
+  });
+});
+
+describe("store user-input submit handling", () => {
+  it("persists optimistic user-input resolution from submit requests", () => {
+    const thread = makeThread({
+      activities: [
+        {
+          id: EventId.makeUnsafe("activity-user-input-open"),
+          tone: "info",
+          kind: "user-input.requested",
+          summary: "User input requested",
+          payload: {
+            requestId: "req-user-input-1",
+            questions: [
+              {
+                id: "opencode-req-user-input-1-1",
+                header: "Question",
+                question: "Pick one",
+                options: [{ label: "Option A", description: "Choose A" }],
+              },
+            ],
+          },
+          turnId: null,
+          createdAt: "2026-02-27T00:00:01.000Z",
+        },
+      ],
+    });
+
+    const next = applyOrchestrationEvent(
+      makeState(thread),
+      makeEvent("thread.user-input-response-requested", {
+        threadId: thread.id,
+        requestId: "req-user-input-1" as never,
+        answers: {
+          "opencode-req-user-input-1-1": "Option A",
+        },
+        createdAt: "2026-02-27T00:00:02.000Z",
+      }),
+    );
+
+    expect(derivePendingUserInputs(next.threads[0]?.activities ?? [])).toEqual([]);
+    expect(next.threads[0]?.activities.at(-1)).toMatchObject({
+      kind: "user-input.resolved",
+      summary: "User input submitted",
+      payload: {
+        requestId: "req-user-input-1",
+        answers: {
+          "opencode-req-user-input-1-1": "Option A",
+        },
+        optimistic: true,
+      },
+    });
+  });
+
+  it("reopens the prompt when a submitted user-input response later fails", () => {
+    const thread = makeThread({
+      activities: [
+        {
+          id: EventId.makeUnsafe("activity-user-input-open"),
+          tone: "info",
+          kind: "user-input.requested",
+          summary: "User input requested",
+          payload: {
+            requestId: "req-user-input-1",
+            questions: [
+              {
+                id: "opencode-req-user-input-1-1",
+                header: "Question",
+                question: "Pick one",
+                options: [{ label: "Option A", description: "Choose A" }],
+              },
+            ],
+          },
+          turnId: null,
+          createdAt: "2026-02-27T00:00:01.000Z",
+        },
+      ],
+    });
+
+    const submitted = applyOrchestrationEvent(
+      makeState(thread),
+      makeEvent("thread.user-input-response-requested", {
+        threadId: thread.id,
+        requestId: "req-user-input-1" as never,
+        answers: {
+          "opencode-req-user-input-1-1": "Option A",
+        },
+        createdAt: "2026-02-27T00:00:02.000Z",
+      }),
+    );
+
+    const failed = applyOrchestrationEvent(
+      submitted,
+      makeEvent("thread.activity-appended", {
+        threadId: thread.id,
+        activity: {
+          id: EventId.makeUnsafe("activity-user-input-failed"),
+          tone: "error",
+          kind: "provider.user-input.respond.failed",
+          summary: "Provider user input response failed",
+          payload: {
+            requestId: "req-user-input-1",
+            detail: "submit failed",
+          },
+          turnId: null,
+          createdAt: "2026-02-27T00:00:03.000Z",
+        },
+      }),
+    );
+
+    expect(
+      derivePendingUserInputs(failed.threads[0]?.activities ?? []).map((entry) => entry.requestId),
+    ).toEqual(["req-user-input-1"]);
+    expect(
+      failed.threads[0]?.activities.some(
+        (activity) =>
+          activity.kind === "user-input.resolved" &&
+          (activity.payload as Record<string, unknown>)?.optimistic === true,
+      ),
+    ).toBe(false);
   });
 });
 

@@ -61,10 +61,12 @@ const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
-const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
+const STATE_PROFILE =
+  process.env.T3CODE_STATE_PROFILE?.trim() || (isDevelopment ? "dev" : "userdata");
+const STATE_DIR = Path.join(BASE_DIR, STATE_PROFILE);
 const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
 const APP_USER_MODEL_ID = "com.t3tools.t3code";
 const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "t3code-dev.desktop" : "t3code.desktop";
@@ -102,6 +104,7 @@ let desktopLogSink: RotatingFileSink | null = null;
 let backendLogSink: RotatingFileSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 let backendObservabilitySettings = readPersistedBackendObservabilitySettings();
+let hasSingleInstanceLock = false;
 
 let destructiveMenuIconCache: Electron.NativeImage | null | undefined;
 const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
@@ -272,6 +275,18 @@ function initializePackagedLogging(): void {
     // Logging setup should never block app startup.
     console.error("[desktop] failed to initialize packaged logging", error);
   }
+}
+
+function focusOrRestoreMainWindow(): void {
+  const targetWindow = mainWindow ?? BrowserWindow.getAllWindows()[0] ?? null;
+  if (!targetWindow) {
+    return;
+  }
+
+  if (targetWindow.isMinimized()) {
+    targetWindow.restore();
+  }
+  targetWindow.focus();
 }
 
 function captureBackendOutput(child: ChildProcess.ChildProcess): void {
@@ -1035,6 +1050,7 @@ function startBackend(): void {
         noBrowser: true,
         port: backendPort,
         t3Home: BASE_DIR,
+        stateProfile: STATE_PROFILE,
         authToken: backendAuthToken,
         ...(backendObservabilitySettings.otlpTracesUrl
           ? { otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl }
@@ -1427,6 +1443,10 @@ function createWindow(): BrowserWindow {
 app.setPath("userData", resolveUserDataPath());
 
 configureAppIdentity();
+hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
 
 async function bootstrap(): Promise<void> {
   writeDesktopLogHeader("bootstrap start");
@@ -1458,27 +1478,35 @@ app.on("before-quit", () => {
   restoreStdIoCapture?.();
 });
 
-app
-  .whenReady()
-  .then(() => {
-    writeDesktopLogHeader("app ready");
-    configureAppIdentity();
-    configureApplicationMenu();
-    registerDesktopProtocol();
-    configureAutoUpdater();
-    void bootstrap().catch((error) => {
-      handleFatalStartupError("bootstrap", error);
-    });
-
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        mainWindow = createWindow();
-      }
-    });
-  })
-  .catch((error) => {
-    handleFatalStartupError("whenReady", error);
+if (hasSingleInstanceLock) {
+  app.on("second-instance", () => {
+    focusOrRestoreMainWindow();
   });
+
+  app
+    .whenReady()
+    .then(() => {
+      writeDesktopLogHeader("app ready");
+      configureAppIdentity();
+      configureApplicationMenu();
+      registerDesktopProtocol();
+      configureAutoUpdater();
+      void bootstrap().catch((error) => {
+        handleFatalStartupError("bootstrap", error);
+      });
+
+      app.on("activate", () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          mainWindow = createWindow();
+          return;
+        }
+        focusOrRestoreMainWindow();
+      });
+    })
+    .catch((error) => {
+      handleFatalStartupError("whenReady", error);
+    });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin" && !isQuitting) {
