@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun run --parallel dev:bundle dev:server-bundle dev:electron",
     "dev:bundle": "tsdown --watch",
-    "dev:server-bundle": "bun --cwd ../server run dev:bundle",
+    "dev:server-bundle": "bun run --cwd ../server dev:bundle",
     "dev:electron": "bun run scripts/dev-electron.mjs",
     "build": "tsdown",
     "start": "bun run scripts/start-electron.mjs",
