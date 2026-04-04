@@ -10,6 +10,8 @@ import { Config, Data, Effect, FileSystem, Layer, Option, Path, Schema, ServiceM
 import { Command, Flag } from "effect/unstable/cli";
 import { NetService } from "@t3tools/shared/Net";
 import {
+  DEFAULT_STATE_PROFILE,
+  DEVELOPMENT_STATE_PROFILE,
   DEFAULT_PORT,
   deriveServerPaths,
   resolveStaticDir,
@@ -42,6 +44,7 @@ const BootstrapEnvelopeSchema = Schema.Struct({
   port: Schema.optional(PortSchema),
   host: Schema.optional(Schema.String),
   t3Home: Schema.optional(Schema.String),
+  stateProfile: Schema.optional(Schema.String),
   devUrl: Schema.optional(Schema.URLFromString),
   noBrowser: Schema.optional(Schema.Boolean),
   authToken: Schema.optional(Schema.String),
@@ -54,6 +57,7 @@ interface CliInput {
   readonly port: Option.Option<number>;
   readonly host: Option.Option<string>;
   readonly t3Home: Option.Option<string>;
+  readonly stateProfile: Option.Option<string>;
   readonly devUrl: Option.Option<URL>;
   readonly noBrowser: Option.Option<boolean>;
   readonly authToken: Option.Option<string>;
@@ -114,6 +118,10 @@ const CliEnvConfig = Config.all({
   port: Config.port("T3CODE_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
   host: Config.string("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
   t3Home: Config.string("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  stateProfile: Config.string("T3CODE_STATE_PROFILE").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
   noBrowser: Config.boolean("T3CODE_NO_BROWSER").pipe(
     Config.option,
@@ -217,7 +225,17 @@ const ServerConfigLive = (input: CliInput) =>
           ),
         ),
       );
-      const derivedPaths = yield* deriveServerPaths(baseDir, devUrl);
+      const stateProfile = Option.getOrElse(
+        resolveOptionPrecedence(
+          input.stateProfile,
+          Option.fromUndefinedOr(env.stateProfile),
+          Option.flatMap(bootstrapEnvelope, (bootstrap) =>
+            Option.fromUndefinedOr(bootstrap.stateProfile),
+          ),
+        ),
+        () => undefined,
+      );
+      const derivedPaths = yield* deriveServerPaths(baseDir, devUrl, stateProfile);
       const noBrowser = resolveBooleanFlag(
         input.noBrowser,
         Option.getOrElse(
@@ -277,6 +295,7 @@ const ServerConfigLive = (input: CliInput) =>
         cwd: cliConfig.cwd,
         host,
         baseDir,
+        stateProfile: stateProfile ?? (devUrl ? DEVELOPMENT_STATE_PROFILE : DEFAULT_STATE_PROFILE),
         ...derivedPaths,
         staticDir,
         devUrl,
@@ -406,6 +425,12 @@ const t3HomeFlag = Flag.string("home-dir").pipe(
   Flag.withDescription("Base directory for all T3 Code data (equivalent to T3CODE_HOME)."),
   Flag.optional,
 );
+const stateProfileFlag = Flag.string("state-profile").pipe(
+  Flag.withDescription(
+    "State profile directory name under the base dir (equivalent to T3CODE_STATE_PROFILE).",
+  ),
+  Flag.optional,
+);
 const devUrlFlag = Flag.string("dev-url").pipe(
   Flag.withSchema(Schema.URLFromString),
   Flag.withDescription("Dev web URL to proxy/redirect to (equivalent to VITE_DEV_SERVER_URL)."),
@@ -444,6 +469,7 @@ export const t3Cli = Command.make("t3", {
   port: portFlag,
   host: hostFlag,
   t3Home: t3HomeFlag,
+  stateProfile: stateProfileFlag,
   devUrl: devUrlFlag,
   noBrowser: noBrowserFlag,
   authToken: authTokenFlag,

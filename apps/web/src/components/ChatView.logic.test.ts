@@ -7,6 +7,7 @@ import {
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
+  shouldBlockComposerSubmit,
   waitForStartedServerThread,
 } from "./ChatView.logic";
 
@@ -72,6 +73,30 @@ describe("buildExpiredTerminalContextToastCopy", () => {
       title: "Expired terminal contexts omitted from message",
       description: "Re-add it if you want that terminal output included.",
     });
+  });
+});
+
+describe("shouldBlockComposerSubmit", () => {
+  it("allows question replies while the turn is still marked busy", () => {
+    expect(
+      shouldBlockComposerSubmit({
+        hasPendingUserInput: true,
+        isSendBusy: true,
+        isConnecting: false,
+        sendInFlight: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("blocks normal sends while the composer is busy", () => {
+    expect(
+      shouldBlockComposerSubmit({
+        hasPendingUserInput: false,
+        isSendBusy: true,
+        isConnecting: false,
+        sendInFlight: false,
+      }),
+    ).toBe(true);
   });
 });
 

@@ -56,6 +56,22 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
       promptInjectedEffortLevels: [],
     } satisfies ModelCapabilities,
   },
+  {
+    slug: "qwen3.6-plus-free",
+    name: "Qwen 3.6 Plus Free",
+    isCustom: false,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    } satisfies ModelCapabilities,
+  },
 ];
 
 const runOpenCodeCommand = (args: ReadonlyArray<string>) =>

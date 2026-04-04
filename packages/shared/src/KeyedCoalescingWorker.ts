@@ -26,11 +26,10 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
   readonly process: (key: K, value: V) => Effect.Effect<void, E, R>;
 }): Effect.Effect<KeyedCoalescingWorker<K, V>, never, Scope.Scope | R> =>
   Effect.gen(function* () {
-    const queue = yield* Effect.acquireRelease(
-      Effect.transaction(TxQueue.unbounded<K>()),
-      (queue) => Effect.transaction(TxQueue.shutdown(queue)),
+    const queue = yield* Effect.acquireRelease(Effect.tx(TxQueue.unbounded<K>()), (queue) =>
+      Effect.tx(TxQueue.shutdown(queue)),
     );
-    const stateRef = yield* Effect.transaction(
+    const stateRef = yield* Effect.tx(
       TxRef.make<KeyedCoalescingWorkerState<K, V>>({
         latestByKey: new Map(),
         queuedKeys: new Set(),
@@ -41,7 +40,7 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
     const processKey = (key: K, value: V): Effect.Effect<void, E, R> =>
       options.process(key, value).pipe(
         Effect.flatMap(() =>
-          Effect.transaction(
+          Effect.tx(
             TxRef.modify(stateRef, (state) => {
               const nextValue = state.latestByKey.get(key);
               if (nextValue === undefined) {
@@ -62,7 +61,7 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
       );
 
     const cleanupFailedKey = (key: K): Effect.Effect<void> =>
-      Effect.transaction(
+      Effect.tx(
         TxRef.modify(stateRef, (state) => {
           const activeKeys = new Set(state.activeKeys);
           activeKeys.delete(key);
@@ -81,9 +80,9 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
         ),
       );
 
-    yield* Effect.transaction(TxQueue.take(queue)).pipe(
+    yield* Effect.tx(TxQueue.take(queue)).pipe(
       Effect.flatMap((key) =>
-        Effect.transaction(
+        Effect.tx(
           TxRef.modify(stateRef, (state) => {
             const queuedKeys = new Set(state.queuedKeys);
             queuedKeys.delete(key);
@@ -117,7 +116,7 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
     );
 
     const enqueue: KeyedCoalescingWorker<K, V>["enqueue"] = (key, value) =>
-      Effect.transaction(
+      Effect.tx(
         TxRef.modify(stateRef, (state) => {
           const latestByKey = new Map(state.latestByKey);
           const existing = latestByKey.get(key);
@@ -138,11 +137,11 @@ export const makeKeyedCoalescingWorker = <K, V, E, R>(options: {
       );
 
     const drainKey: KeyedCoalescingWorker<K, V>["drainKey"] = (key) =>
-      Effect.transaction(
+      Effect.tx(
         TxRef.get(stateRef).pipe(
           Effect.tap((state) =>
             state.latestByKey.has(key) || state.queuedKeys.has(key) || state.activeKeys.has(key)
-              ? Effect.retryTransaction
+              ? Effect.txRetry
               : Effect.void,
           ),
           Effect.asVoid,

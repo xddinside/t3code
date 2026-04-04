@@ -23,6 +23,7 @@ import { LRUCache } from "../lib/lruCache";
 import { useTheme } from "../hooks/useTheme";
 import { resolveMarkdownFileLinkTarget } from "../markdown-links";
 import { readNativeApi } from "../nativeApi";
+import { containsMarkdownTable, normalizeMarkdownTables } from "../chatMarkdown";
 
 class CodeHighlightErrorBoundary extends React.Component<
   { fallback: ReactNode; children: ReactNode },
@@ -238,6 +239,8 @@ function SuspenseShikiCodeBlock({
 function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
+  const normalizedText = useMemo(() => normalizeMarkdownTables(text), [text]);
+  const hasMarkdownTable = useMemo(() => containsMarkdownTable(normalizedText), [normalizedText]);
   const markdownComponents = useMemo<Components>(
     () => ({
       a({ node: _node, href, ...props }) {
@@ -284,14 +287,23 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
           </MarkdownCodeBlock>
         );
       },
+      table({ node: _node, children, ...props }) {
+        return (
+          <div className="chat-markdown-table-wrap">
+            <table {...props}>{children}</table>
+          </div>
+        );
+      },
     }),
     [cwd, diffThemeName, isStreaming],
   );
 
   return (
-    <div className="chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/80">
+    <div
+      className={`chat-markdown ${hasMarkdownTable ? "chat-markdown-has-table" : ""} w-full min-w-0 text-sm leading-relaxed text-foreground/80`}
+    >
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-        {text}
+        {normalizedText}
       </ReactMarkdown>
     </div>
   );

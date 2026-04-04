@@ -80,6 +80,7 @@ export const MODEL_OPTIONS_BY_PROVIDER = {
   opencode: [
     { slug: "minimax-m2.5-free", name: "MiniMax M2.5 Free" },
     { slug: "mimo-v2-pro-free", name: "MiMo V2 Pro Free" },
+    { slug: "qwen3.6-plus-free", name: "Qwen 3.6 Plus Free" },
   ],
 } as const satisfies Record<ProviderKind, readonly ModelOption[]>;
 
@@ -134,6 +135,8 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER: Record<ProviderKind, Record<string,
   opencode: {
     "minimax m2.5 free": "minimax-m2.5-free",
     "mimo v2 pro free": "mimo-v2-pro-free",
+    "qwen 3.6 plus free": "qwen3.6-plus-free",
+    "qwen-3.6-plus-free": "qwen3.6-plus-free",
   },
 };
 

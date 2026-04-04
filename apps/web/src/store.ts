@@ -1,4 +1,5 @@
 import {
+  EventId,
   type OrchestrationEvent,
   type OrchestrationMessage,
   type OrchestrationProposedPlan,
@@ -205,6 +206,58 @@ function compareActivities(
   }
 
   return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
+}
+
+function getActivityRequestId(
+  activity: Pick<Thread["activities"][number], "payload">,
+): string | null {
+  const payload =
+    activity.payload && typeof activity.payload === "object"
+      ? (activity.payload as Record<string, unknown>)
+      : null;
+  return payload && typeof payload.requestId === "string" ? payload.requestId : null;
+}
+
+function isOptimisticUserInputResolvedActivity(activity: Thread["activities"][number]): boolean {
+  if (activity.kind !== "user-input.resolved") {
+    return false;
+  }
+  const payload =
+    activity.payload && typeof activity.payload === "object"
+      ? (activity.payload as Record<string, unknown>)
+      : null;
+  return payload?.optimistic === true;
+}
+
+function withoutOptimisticUserInputResolution(
+  activities: Thread["activities"],
+  requestId: string,
+): Thread["activities"] {
+  return activities.filter(
+    (activity) =>
+      !(
+        isOptimisticUserInputResolvedActivity(activity) &&
+        getActivityRequestId(activity) === requestId
+      ),
+  );
+}
+
+function buildOptimisticUserInputResolvedActivity(
+  event: Extract<OrchestrationEvent, { type: "thread.user-input-response-requested" }>,
+): Thread["activities"][number] {
+  return {
+    id: EventId.makeUnsafe(`optimistic-user-input-resolved:${event.payload.requestId}`),
+    tone: "info",
+    kind: "user-input.resolved",
+    summary: "User input submitted",
+    payload: {
+      requestId: event.payload.requestId,
+      answers: event.payload.answers,
+      optimistic: true,
+    },
+    turnId: null,
+    createdAt: event.payload.createdAt,
+  };
 }
 
 function buildLatestTurn(params: {
@@ -858,8 +911,25 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
 
     case "thread.activity-appended": {
       const threads = updateThread(state.threads, event.payload.threadId, (thread) => {
+        const requestId = getActivityRequestId(event.payload.activity);
         const activities = [
-          ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
+          ...thread.activities.filter((activity) => {
+            if (activity.id === event.payload.activity.id) {
+              return false;
+            }
+
+            if (
+              requestId &&
+              isOptimisticUserInputResolvedActivity(activity) &&
+              getActivityRequestId(activity) === requestId &&
+              (event.payload.activity.kind === "user-input.resolved" ||
+                event.payload.activity.kind === "provider.user-input.respond.failed")
+            ) {
+              return false;
+            }
+
+            return true;
+          }),
           { ...event.payload.activity },
         ]
           .toSorted(compareActivities)
@@ -874,8 +944,34 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
     }
 
     case "thread.approval-response-requested":
-    case "thread.user-input-response-requested":
       return state;
+
+    case "thread.user-input-response-requested": {
+      const threads = updateThread(state.threads, event.payload.threadId, (thread) => {
+        const requestId = String(event.payload.requestId);
+        const existingResolved = thread.activities.some(
+          (activity) =>
+            activity.kind === "user-input.resolved" && getActivityRequestId(activity) === requestId,
+        );
+        if (existingResolved) {
+          return thread;
+        }
+
+        const activities = [
+          ...withoutOptimisticUserInputResolution(thread.activities, requestId),
+          buildOptimisticUserInputResolvedActivity(event),
+        ]
+          .toSorted(compareActivities)
+          .slice(-MAX_THREAD_ACTIVITIES);
+
+        return {
+          ...thread,
+          activities,
+          updatedAt: event.occurredAt,
+        };
+      });
+      return threads === state.threads ? state : { ...state, threads };
+    }
   }
 
   return state;

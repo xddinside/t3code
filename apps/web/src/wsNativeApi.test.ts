@@ -1,4 +1,5 @@
 import {
+  ApprovalRequestId,
   CommandId,
   type ContextMenuItem,
   EventId,
@@ -352,6 +353,29 @@ describe("wsNativeApi", () => {
     expect(requestMock).toHaveBeenCalledWith(ORCHESTRATION_WS_METHODS.dispatchCommand, {
       command,
     });
+  });
+
+  it("uses no client timeout for thread.user-input.respond commands", async () => {
+    requestMock.mockResolvedValue(undefined);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    const command = {
+      type: "thread.user-input.respond",
+      commandId: CommandId.makeUnsafe("cmd-user-input-1"),
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      requestId: ApprovalRequestId.makeUnsafe("que_123"),
+      answers: { "opencode-que_123-1": "Layout" },
+      createdAt: "2026-04-02T00:00:00.000Z",
+    } as const;
+
+    await api.orchestration.dispatchCommand(command);
+
+    expect(requestMock).toHaveBeenCalledWith(
+      ORCHESTRATION_WS_METHODS.dispatchCommand,
+      { command },
+      { timeoutMs: null },
+    );
   });
 
   it("forwards workspace file writes to the websocket project method", async () => {

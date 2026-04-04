@@ -120,6 +120,7 @@ interface CreateDevRunnerEnvInput {
   readonly serverOffset: number;
   readonly webOffset: number;
   readonly t3Home: string | undefined;
+  readonly stateProfile: string | undefined;
   readonly authToken: string | undefined;
   readonly noBrowser: boolean | undefined;
   readonly autoBootstrapProjectFromCwd: boolean | undefined;
@@ -135,6 +136,7 @@ export function createDevRunnerEnv({
   serverOffset,
   webOffset,
   t3Home,
+  stateProfile,
   authToken,
   noBrowser,
   autoBootstrapProjectFromCwd,
@@ -156,6 +158,13 @@ export function createDevRunnerEnv({
       VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://localhost:${webPort}`,
       T3CODE_HOME: resolvedBaseDir,
     };
+
+    const resolvedStateProfile = stateProfile?.trim() || (output.VITE_DEV_SERVER_URL ? "dev" : "");
+    if (resolvedStateProfile) {
+      output.T3CODE_STATE_PROFILE = resolvedStateProfile;
+    } else {
+      delete output.T3CODE_STATE_PROFILE;
+    }
 
     if (!isDesktopMode) {
       output.T3CODE_PORT = String(serverPort);
@@ -350,6 +359,7 @@ export function resolveModePortOffsets<R = NetService>({
 interface DevRunnerCliInput {
   readonly mode: DevMode;
   readonly t3Home: string | undefined;
+  readonly stateProfile: string | undefined;
   readonly authToken: string | undefined;
   readonly noBrowser: boolean | undefined;
   readonly autoBootstrapProjectFromCwd: boolean | undefined;
@@ -430,6 +440,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       serverOffset,
       webOffset,
       t3Home: input.t3Home,
+      stateProfile: input.stateProfile,
       authToken: input.authToken,
       noBrowser: resolveOptionalBooleanOverride(input.noBrowser, envOverrides.noBrowser),
       autoBootstrapProjectFromCwd: resolveOptionalBooleanOverride(
@@ -451,7 +462,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
         : "";
 
     yield* Effect.logInfo(
-      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.T3CODE_PORT)} webPort=${String(env.PORT)} baseDir=${String(env.T3CODE_HOME)}`,
+      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.T3CODE_PORT)} webPort=${String(env.PORT)} baseDir=${String(env.T3CODE_HOME)} stateProfile=${String(env.T3CODE_STATE_PROFILE)}`,
     );
 
     if (input.dryRun) {
@@ -502,6 +513,12 @@ const devRunnerCli = Command.make("dev-runner", {
   t3Home: Flag.string("home-dir").pipe(
     Flag.withDescription("Base directory for all T3 Code data (equivalent to T3CODE_HOME)."),
     Flag.withFallbackConfig(optionalStringConfig("T3CODE_HOME")),
+  ),
+  stateProfile: Flag.string("state-profile").pipe(
+    Flag.withDescription(
+      "State profile directory name under the base dir (equivalent to T3CODE_STATE_PROFILE).",
+    ),
+    Flag.withFallbackConfig(optionalStringConfig("T3CODE_STATE_PROFILE")),
   ),
   authToken: Flag.string("auth-token").pipe(
     Flag.withDescription("Auth token (forwards to T3CODE_AUTH_TOKEN)."),

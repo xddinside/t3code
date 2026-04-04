@@ -190,6 +190,7 @@ import {
   readFileAsDataUrl,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
+  shouldBlockComposerSubmit,
   threadHasStarted,
   waitForStartedServerThread,
 } from "./ChatView.logic";
@@ -493,6 +494,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const [isRevertingCheckpoint, setIsRevertingCheckpoint] = useState(false);
   const [respondingRequestIds, setRespondingRequestIds] = useState<ApprovalRequestId[]>([]);
   const [respondingUserInputRequestIds, setRespondingUserInputRequestIds] = useState<
+    ApprovalRequestId[]
+  >([]);
+  const [submittedUserInputRequestIds, setSubmittedUserInputRequestIds] = useState<
     ApprovalRequestId[]
   >([]);
   const [pendingUserInputAnswersByRequestId, setPendingUserInputAnswersByRequestId] = useState<
@@ -837,11 +841,25 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => derivePendingApprovals(threadActivities),
     [threadActivities],
   );
-  const pendingUserInputs = useMemo(
+  const rawPendingUserInputs = useMemo(
     () => derivePendingUserInputs(threadActivities),
     [threadActivities],
   );
+  const pendingUserInputs = useMemo(
+    () =>
+      rawPendingUserInputs.filter(
+        (pendingUserInput) => !submittedUserInputRequestIds.includes(pendingUserInput.requestId),
+      ),
+    [rawPendingUserInputs, submittedUserInputRequestIds],
+  );
   const activePendingUserInput = pendingUserInputs[0] ?? null;
+  useEffect(() => {
+    setSubmittedUserInputRequestIds((existing) =>
+      existing.filter((requestId) =>
+        rawPendingUserInputs.some((pendingUserInput) => pendingUserInput.requestId === requestId),
+      ),
+    );
+  }, [rawPendingUserInputs]);
   const activePendingDraftAnswers = useMemo(
     () =>
       activePendingUserInput
@@ -914,7 +932,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     activeLatestTurn,
     phase,
     activePendingApproval: activePendingApproval?.requestId ?? null,
-    activePendingUserInput: activePendingUserInput?.requestId ?? null,
+    activePendingUserInput: rawPendingUserInputs[0]?.requestId ?? null,
     threadError: activeThread?.error,
   });
   const isWorking = phase === "running" || isSendBusy || isConnecting || isRevertingCheckpoint;
@@ -2565,7 +2583,18 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const onSend = async (e?: { preventDefault: () => void }) => {
     e?.preventDefault();
     const api = readNativeApi();
-    if (!api || !activeThread || isSendBusy || isConnecting || sendInFlightRef.current) return;
+    if (
+      !api ||
+      !activeThread ||
+      shouldBlockComposerSubmit({
+        hasPendingUserInput: activePendingProgress !== null,
+        isSendBusy,
+        isConnecting,
+        sendInFlight: sendInFlightRef.current,
+      })
+    ) {
+      return;
+    }
     if (activePendingProgress) {
       onAdvanceActivePendingUserInput();
       return;
@@ -2938,6 +2967,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
       setRespondingUserInputRequestIds((existing) =>
         existing.includes(requestId) ? existing : [...existing, requestId],
       );
+      setSubmittedUserInputRequestIds((existing) =>
+        existing.includes(requestId) ? existing : [...existing, requestId],
+      );
       await api.orchestration
         .dispatchCommand({
           type: "thread.user-input.respond",
@@ -2948,6 +2980,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
           createdAt: new Date().toISOString(),
         })
         .catch((err: unknown) => {
+          setSubmittedUserInputRequestIds((existing) =>
+            existing.filter((pendingRequestId) => pendingRequestId !== requestId),
+          );
           setStoreThreadError(
             activeThreadId,
             err instanceof Error ? err.message : "Failed to submit user input.",
@@ -3816,7 +3851,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                     <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
                       <ComposerPendingUserInputPanel
                         pendingUserInputs={pendingUserInputs}
-                        respondingRequestIds={respondingRequestIds}
+                        respondingRequestIds={respondingUserInputRequestIds}
                         answers={activePendingDraftAnswers}
                         questionIndex={activePendingQuestionIndex}
                         onSelectOption={onSelectActivePendingUserInputOption}

@@ -111,6 +111,7 @@ it.layer(testLayer)("server CLI command", (it) => {
       assert.equal(resolvedConfig?.host, "0.0.0.0");
       assert.equal(resolvedConfig?.baseDir, "/tmp/t3-cli-home");
       assert.equal(resolvedConfig?.stateDir, "/tmp/t3-cli-home/dev");
+      assert.equal(resolvedConfig?.stateProfile, "dev");
       assert.equal(resolvedConfig?.devUrl?.toString(), "http://127.0.0.1:5173/");
       assert.equal(resolvedConfig?.noBrowser, true);
       assert.equal(resolvedConfig?.authToken, "auth-secret");
@@ -147,6 +148,7 @@ it.layer(testLayer)("server CLI command", (it) => {
       assert.equal(resolvedConfig?.host, "100.88.10.4");
       assert.equal(resolvedConfig?.baseDir, "/tmp/t3-env-home");
       assert.equal(resolvedConfig?.stateDir, "/tmp/t3-env-home/dev");
+      assert.equal(resolvedConfig?.stateProfile, "dev");
       assert.equal(resolvedConfig?.devUrl?.toString(), "http://localhost:5173/");
       assert.equal(resolvedConfig?.noBrowser, true);
       assert.equal(resolvedConfig?.authToken, "env-token");
@@ -205,6 +207,7 @@ it.layer(testLayer)("server CLI command", (it) => {
       assert.equal(resolvedConfig?.host, "127.0.0.2");
       assert.equal(resolvedConfig?.baseDir, "/tmp/t3-bootstrap-home");
       assert.equal(resolvedConfig?.stateDir, "/tmp/t3-bootstrap-home/dev");
+      assert.equal(resolvedConfig?.stateProfile, "dev");
       assert.equal(resolvedConfig?.devUrl?.toString(), "http://127.0.0.1:5173/");
       assert.equal(resolvedConfig?.noBrowser, true);
       assert.equal(resolvedConfig?.authToken, "bootstrap-token");
@@ -241,11 +244,31 @@ it.layer(testLayer)("server CLI command", (it) => {
       assert.equal(resolvedConfig?.port, 4999);
       assert.equal(resolvedConfig?.host, "0.0.0.0");
       assert.equal(resolvedConfig?.baseDir, "/tmp/t3-env-home");
+      assert.equal(resolvedConfig?.stateProfile, "dev");
       assert.equal(resolvedConfig?.devUrl?.toString(), "http://127.0.0.1:5173/");
       assert.equal(resolvedConfig?.noBrowser, true);
       assert.equal(resolvedConfig?.authToken, "cli-token");
       assert.equal(resolvedConfig?.autoBootstrapProjectFromCwd, true);
       assert.equal(resolvedConfig?.logWebSocketEvents, true);
+    }),
+  );
+
+  it.effect("supports explicit state profile overrides across dev and non-dev modes", () =>
+    Effect.gen(function* () {
+      yield* runCli([
+        "--mode",
+        "desktop",
+        "--home-dir",
+        "/tmp/t3-shared-home",
+        "--state-profile",
+        "remote-shared",
+        "--dev-url",
+        "http://127.0.0.1:5173",
+      ]);
+
+      assert.equal(resolvedConfig?.baseDir, "/tmp/t3-shared-home");
+      assert.equal(resolvedConfig?.stateProfile, "remote-shared");
+      assert.equal(resolvedConfig?.stateDir, "/tmp/t3-shared-home/remote-shared");
     }),
   );
 

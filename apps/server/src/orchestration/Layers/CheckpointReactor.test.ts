@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CheckpointStoreLive } from "../../checkpointing/Layers/CheckpointStore.ts";
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
+import { GitCommandError } from "../../git/Errors.ts";
 import { CheckpointReactorLive } from "./CheckpointReactor.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
@@ -39,6 +40,7 @@ import {
 import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
 import { ServerConfig } from "../../config.ts";
 import { WorkspaceEntriesLive } from "../../workspace/Layers/WorkspaceEntries.ts";
+import type { CheckpointStoreShape } from "../../checkpointing/Services/CheckpointStore.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
 const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
@@ -238,6 +240,7 @@ describe("CheckpointReactor", () => {
     readonly threadWorktreePath?: string | null;
     readonly providerSessionCwd?: string;
     readonly providerName?: ProviderKind;
+    readonly checkpointStore?: CheckpointStoreShape;
   }) {
     const cwd = createGitRepository();
     tempDirs.push(cwd);
@@ -258,11 +261,16 @@ describe("CheckpointReactor", () => {
       prefix: "t3-checkpoint-reactor-test-",
     });
 
+    const checkpointStoreLayer =
+      options?.checkpointStore !== undefined
+        ? Layer.succeed(CheckpointStore, options.checkpointStore)
+        : CheckpointStoreLive;
+
     const layer = CheckpointReactorLive.pipe(
       Layer.provideMerge(orchestrationLayer),
       Layer.provideMerge(RuntimeReceiptBusLive),
       Layer.provideMerge(Layer.succeed(ProviderService, provider.service)),
-      Layer.provideMerge(CheckpointStoreLive),
+      Layer.provideMerge(checkpointStoreLayer),
       Layer.provideMerge(WorkspaceEntriesLive),
       Layer.provideMerge(GitCoreLive),
       Layer.provideMerge(ServerConfigLayer),
@@ -598,6 +606,68 @@ describe("CheckpointReactor", () => {
     expect(
       thread.activities.some((activity) => activity.kind === "checkpoint.capture.failed"),
     ).toBe(true);
+  });
+
+  it("keeps disk-capacity checkpoint failures out of the thread activity log", async () => {
+    const checkpointStore: CheckpointStoreShape = {
+      isGitRepository: () => Effect.succeed(true),
+      captureCheckpoint: ({ cwd }) =>
+        Effect.fail(
+          new GitCommandError({
+            operation: "CheckpointStore.captureCheckpoint",
+            command: "git read-tree HEAD",
+            cwd,
+            detail: "fatal: sha1 file '/tmp/index.lock' write error: Disk quota exceeded",
+          }),
+        ),
+      hasCheckpointRef: () => Effect.succeed(false),
+      restoreCheckpoint: () => Effect.succeed(false),
+      diffCheckpoints: () => Effect.succeed(""),
+      deleteCheckpointRefs: () => Effect.void,
+    };
+    const harness = await createHarness({
+      seedFilesystemCheckpoints: false,
+      checkpointStore,
+    });
+    const createdAt = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-session-set-disk-quota"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: createdAt,
+        },
+        createdAt,
+      }),
+    );
+
+    harness.provider.emit({
+      type: "turn.completed",
+      eventId: EventId.makeUnsafe("evt-turn-completed-disk-quota"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      turnId: asTurnId("turn-disk-quota"),
+      payload: { state: "completed" },
+    });
+
+    await harness.drain();
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+
+    expect(thread).toBeDefined();
+    expect(
+      thread?.activities.some((activity) => activity.kind === "checkpoint.capture.failed"),
+    ).toBe(false);
   });
 
   it("captures pre-turn baseline from project workspace root when thread worktree is unset", async () => {

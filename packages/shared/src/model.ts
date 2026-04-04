@@ -259,7 +259,8 @@ export function inferProviderForModel(
       trimmed === "gpt-5-nano" ||
       trimmed.startsWith("minimax-") ||
       trimmed.startsWith("mimo-") ||
-      trimmed.startsWith("nemotron-")
+      trimmed.startsWith("nemotron-") ||
+      trimmed.startsWith("qwen")
     ) {
       return "opencode";
     }

@@ -16,9 +16,11 @@ class MockWebSocket {
 
   readyState = MockWebSocket.CONNECTING;
   readonly sent: string[] = [];
+  readonly url: string;
   private readonly listeners = new Map<WsEventType, Set<WsListener>>();
 
-  constructor(_url: string) {
+  constructor(url: string) {
+    this.url = url;
     sockets.push(this);
   }
 
@@ -204,6 +206,48 @@ describe("WsTransport", () => {
     );
 
     await expect(requestPromise).resolves.toEqual({ projects: [] });
+    transport.dispose();
+  });
+
+  it("forwards the page token query param to websocket connections", () => {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        location: {
+          href: "https://remote.example.com/?token=secret-token",
+          protocol: "https:",
+          hostname: "remote.example.com",
+          port: "",
+        },
+        desktopBridge: undefined,
+      },
+    });
+
+    const transport = new WsTransport();
+    const socket = getSocket();
+
+    expect(socket.url).toBe("wss://remote.example.com/?token=secret-token");
+    transport.dispose();
+  });
+
+  it("does not overwrite an explicit websocket token query param", () => {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        location: {
+          href: "https://remote.example.com/?token=page-token",
+          protocol: "https:",
+          hostname: "remote.example.com",
+          port: "",
+        },
+        desktopBridge: undefined,
+      },
+    });
+
+    const transport = new WsTransport("wss://remote.example.com/socket?token=explicit-token");
+    const socket = getSocket();
+
+    expect(socket.url).toBe("wss://remote.example.com/socket?token=explicit-token");
     transport.dispose();
   });
 

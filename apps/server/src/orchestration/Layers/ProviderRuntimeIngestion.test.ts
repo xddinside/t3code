@@ -2382,4 +2382,132 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.status).toBe("error");
     expect(thread.session?.lastError).toBe("runtime still processed");
   });
+
+  it("keeps prior OpenCode assistant messages when item ids are reused across turns", async () => {
+    const harness = await createHarness();
+    const firstNow = new Date().toISOString();
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-opencode-turn-1-started"),
+      provider: "opencode",
+      threadId: asThreadId("thread-1"),
+      createdAt: firstNow,
+      turnId: asTurnId("turn-opencode-1"),
+    });
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-opencode-turn-1-delta"),
+      provider: "opencode",
+      threadId: asThreadId("thread-1"),
+      createdAt: firstNow,
+      turnId: asTurnId("turn-opencode-1"),
+      itemId: asItemId("shared-part"),
+      payload: {
+        streamKind: "assistant_text",
+        delta: "first reply",
+      },
+    });
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-opencode-turn-1-item-completed"),
+      provider: "opencode",
+      threadId: asThreadId("thread-1"),
+      createdAt: firstNow,
+      turnId: asTurnId("turn-opencode-1"),
+      itemId: asItemId("shared-part"),
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+      },
+    });
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-opencode-turn-1-completed"),
+      provider: "opencode",
+      threadId: asThreadId("thread-1"),
+      createdAt: firstNow,
+      turnId: asTurnId("turn-opencode-1"),
+      payload: {
+        state: "completed",
+      },
+    });
+
+    await waitForThread(harness.engine, (thread) =>
+      thread.messages.some(
+        (message: ProviderRuntimeTestMessage) =>
+          message.id === "assistant:turn-opencode-1:shared-part" &&
+          message.text === "first reply" &&
+          !message.streaming,
+      ),
+    );
+
+    const secondNow = new Date().toISOString();
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-opencode-turn-2-started"),
+      provider: "opencode",
+      threadId: asThreadId("thread-1"),
+      createdAt: secondNow,
+      turnId: asTurnId("turn-opencode-2"),
+    });
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-opencode-turn-2-delta"),
+      provider: "opencode",
+      threadId: asThreadId("thread-1"),
+      createdAt: secondNow,
+      turnId: asTurnId("turn-opencode-2"),
+      itemId: asItemId("shared-part"),
+      payload: {
+        streamKind: "assistant_text",
+        delta: "second reply",
+      },
+    });
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-opencode-turn-2-item-completed"),
+      provider: "opencode",
+      threadId: asThreadId("thread-1"),
+      createdAt: secondNow,
+      turnId: asTurnId("turn-opencode-2"),
+      itemId: asItemId("shared-part"),
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+      },
+    });
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-opencode-turn-2-completed"),
+      provider: "opencode",
+      threadId: asThreadId("thread-1"),
+      createdAt: secondNow,
+      turnId: asTurnId("turn-opencode-2"),
+      payload: {
+        state: "completed",
+      },
+    });
+
+    const thread = await waitForThread(harness.engine, (entry) =>
+      entry.messages.some(
+        (message: ProviderRuntimeTestMessage) =>
+          message.id === "assistant:turn-opencode-2:shared-part" &&
+          message.text === "second reply" &&
+          !message.streaming,
+      ),
+    );
+
+    const assistantMessages = thread.messages.filter(
+      (message: ProviderRuntimeTestMessage) => message.role === "assistant",
+    );
+    expect(assistantMessages.map((message) => message.id)).toEqual([
+      "assistant:turn-opencode-1:shared-part",
+      "assistant:turn-opencode-2:shared-part",
+    ]);
+    expect(assistantMessages.map((message) => message.text)).toEqual([
+      "first reply",
+      "second reply",
+    ]);
+  });
 });

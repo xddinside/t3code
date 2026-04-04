@@ -217,8 +217,16 @@ export function createWsNativeApi(): NativeApi {
     },
     orchestration: {
       getSnapshot: () => transport.request(ORCHESTRATION_WS_METHODS.getSnapshot),
-      dispatchCommand: (command) =>
-        transport.request(ORCHESTRATION_WS_METHODS.dispatchCommand, { command }),
+      dispatchCommand: (command) => {
+        if (command.type === "thread.user-input.respond") {
+          return transport.request(
+            ORCHESTRATION_WS_METHODS.dispatchCommand,
+            { command },
+            { timeoutMs: null },
+          );
+        }
+        return transport.request(ORCHESTRATION_WS_METHODS.dispatchCommand, { command });
+      },
       getTurnDiff: (input) => transport.request(ORCHESTRATION_WS_METHODS.getTurnDiff, input),
       getFullThreadDiff: (input) =>
         transport.request(ORCHESTRATION_WS_METHODS.getFullThreadDiff, input),

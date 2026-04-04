@@ -22,7 +22,7 @@ import {
   type ProviderSession,
   type UserInputQuestion,
 } from "@t3tools/contracts";
-import { Effect, Exit, Layer, Queue, Stream } from "effect";
+import { Cause, Effect, Exit, Layer, Queue, Stream } from "effect";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
@@ -128,6 +128,113 @@ function asString(value: unknown): string | undefined {
 
 function asArray(value: unknown): ReadonlyArray<unknown> | undefined {
   return Array.isArray(value) ? value : undefined;
+}
+
+export function normalizeOpenCodeUserInputQuestions(input: {
+  requestId: string;
+  questions: ReadonlyArray<unknown>;
+}): UserInputQuestion[] {
+  const normalizedQuestions: UserInputQuestion[] = [];
+
+  for (const [index, entry] of input.questions.entries()) {
+    const question = asRecord(entry);
+    if (!question) {
+      continue;
+    }
+
+    const prompt = asString(question.question);
+    if (!prompt) {
+      continue;
+    }
+
+    const options: Array<{ label: string; description: string }> = [];
+    for (const optionEntry of asArray(question.options) ?? []) {
+      const option = asRecord(optionEntry);
+      const label = asString(option?.label);
+      const description = asString(option?.description);
+      if (!label || !description) {
+        continue;
+      }
+      options.push({ label, description });
+    }
+
+    if (options.length === 0) {
+      continue;
+    }
+
+    normalizedQuestions.push({
+      id: `opencode-${input.requestId}-${index + 1}`,
+      header: asString(question.header) ?? `Question ${index + 1}`,
+      question: prompt,
+      options,
+      multiSelect: question.multiple === true,
+    });
+  }
+
+  return normalizedQuestions;
+}
+
+export function buildOpenCodeResolvedUserInputAnswers(input: {
+  state: PendingQuestionState | undefined;
+  rawAnswers: unknown;
+}): Record<string, string | string[]> {
+  const state = input.state;
+  const answerGroups = asArray(input.rawAnswers);
+  if (!state || !answerGroups) {
+    return {};
+  }
+
+  const resolved: Record<string, string | string[]> = {};
+  for (const [index, question] of state.questions.entries()) {
+    const rawAnswerGroup = asArray(answerGroups[index]) ?? [];
+    const answers = rawAnswerGroup
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    if (answers.length === 0) {
+      continue;
+    }
+
+    resolved[question.id] = question.multiSelect ? answers : answers[0]!;
+  }
+
+  return resolved;
+}
+
+export function buildOpenCodeOrderedUserInputAnswers(input: {
+  state: PendingQuestionState;
+  answers: Record<string, unknown>;
+}): string[][] {
+  return input.state.questionIds.map((questionId) => {
+    const answer = input.answers[questionId];
+    if (typeof answer === "string") {
+      return answer.trim().length > 0 ? [answer.trim()] : [];
+    }
+    if (Array.isArray(answer)) {
+      return answer.filter((entry): entry is string => typeof entry === "string");
+    }
+    if (answer && typeof answer === "object") {
+      const nested = asArray((answer as Record<string, unknown>).answers);
+      return nested?.filter((entry): entry is string => typeof entry === "string") ?? [];
+    }
+    return [];
+  });
+}
+
+export function listOpenCodePendingQuestionRequestIds(raw: unknown): string[] {
+  const entries = asArray(raw) ?? [];
+  const requestIds: string[] = [];
+
+  for (const entry of entries) {
+    const request = asRecord(entry);
+    const requestId = asString(request?.id);
+    if (requestId) {
+      requestIds.push(requestId);
+    }
+  }
+
+  return requestIds;
 }
 
 function makeRequestError(method: string, detail: string, cause?: unknown): ProviderAdapterError {
@@ -645,6 +752,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
       readonly path: string;
       readonly cwd?: string | undefined;
       readonly body?: unknown;
+      readonly responseMode?: "json" | "status-only" | undefined;
     }): Effect.Effect<T, ProviderAdapterError> =>
       Effect.tryPromise({
         try: async () => {
@@ -665,6 +773,14 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
             );
           }
 
+          if (input.responseMode === "status-only") {
+            // Some OpenCode endpoints acknowledge with a response body that can
+            // outlive the actual state change we care about. Drain it in the
+            // background so the caller can continue once the request is accepted.
+            void response.arrayBuffer().catch(() => undefined);
+            return undefined as T;
+          }
+
           const text = await response.text();
           if (text.trim().length === 0) {
             return undefined as T;
@@ -677,6 +793,120 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
             cause instanceof Error ? cause.message : "Request failed.",
             cause,
           ),
+      });
+
+    const isQuestionStillPending = (input: {
+      readonly requestId: string;
+      readonly cwd?: string | undefined;
+    }): Effect.Effect<boolean, ProviderAdapterError> =>
+      requestJson<unknown>({
+        method: "GET",
+        path: "/question",
+        cwd: input.cwd,
+      }).pipe(
+        Effect.map((response) =>
+          listOpenCodePendingQuestionRequestIds(response).includes(input.requestId),
+        ),
+      );
+
+    const finalizeSendTurnResponse = (input: {
+      readonly threadId: ThreadId;
+      readonly turnId: TurnId;
+      readonly response: OpenCodeSendMessageResponse | undefined;
+    }) =>
+      Effect.gen(function* () {
+        const context = contextsByThreadId.get(input.threadId);
+        const turnState = context?.turns.find((entry) => entry.id === input.turnId);
+
+        yield* Effect.sleep("150 millis");
+
+        if (!turnState?.sawStreamingActivity) {
+          yield* emitAssistantResponseFromMessage({
+            threadId: input.threadId,
+            turnId: input.turnId,
+            response: input.response,
+            mode: "fallback",
+          });
+          return;
+        }
+
+        if (!turnState.assistantItemCompleted && context?.activeTurnId === input.turnId) {
+          yield* emitAssistantResponseFromMessage({
+            threadId: input.threadId,
+            turnId: input.turnId,
+            response: input.response,
+            mode: "completion-only",
+          });
+        }
+      });
+
+    const handleSendTurnRequestFailure = (input: {
+      readonly threadId: ThreadId;
+      readonly turnId: TurnId;
+      readonly requestPayload: Record<string, unknown>;
+      readonly cause: Cause.Cause<ProviderAdapterError>;
+    }) =>
+      Effect.gen(function* () {
+        const context = contextsByThreadId.get(input.threadId);
+        const turnState = context?.turns.find((entry) => entry.id === input.turnId);
+        const detail = Cause.pretty(input.cause);
+        const requestAlreadyProgressed =
+          context?.activeTurnId !== input.turnId ||
+          turnState?.sawStreamingActivity === true ||
+          turnState?.assistantItemCompleted === true;
+
+        if (requestAlreadyProgressed) {
+          yield* Effect.logWarning(
+            "OpenCode sendTurn request failed after runtime activity had already started",
+            {
+              threadId: String(input.threadId),
+              turnId: String(input.turnId),
+              detail,
+            },
+          );
+          return;
+        }
+
+        if (context && context.activeTurnId === input.turnId) {
+          context.activeTurnId = undefined;
+          context.updatedAt = isoNow();
+        }
+
+        yield* emitThreadError(input.threadId, "OpenCode turn request failed", detail);
+        yield* emit({
+          type: "turn.completed",
+          eventId: EventId.makeUnsafe(randomUUID()),
+          provider: PROVIDER,
+          threadId: input.threadId,
+          turnId: input.turnId,
+          createdAt: isoNow(),
+          raw: {
+            source: "opencode.server.event",
+            messageType: "sendTurn",
+            payload: input.requestPayload,
+          },
+          payload: {
+            state: "failed",
+            errorMessage: detail,
+          },
+        });
+        yield* emit({
+          type: "session.state.changed",
+          eventId: EventId.makeUnsafe(randomUUID()),
+          provider: PROVIDER,
+          threadId: input.threadId,
+          createdAt: isoNow(),
+          raw: {
+            source: "opencode.server.event",
+            messageType: "sendTurn",
+            payload: input.requestPayload,
+          },
+          payload: {
+            state: "error",
+            reason: "OpenCode turn request failed",
+            detail,
+          },
+        });
       });
 
     const ensureEventLoop = (cwd?: string) =>
@@ -940,41 +1170,10 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                     break;
                   }
 
-                  const normalizedQuestions: UserInputQuestion[] = [];
-                  for (const [index, entry] of rawQuestions.entries()) {
-                    const question = asRecord(entry);
-                    if (!question) {
-                      continue;
-                    }
-
-                    const prompt = asString(question.question);
-                    if (!prompt) {
-                      continue;
-                    }
-
-                    const options: Array<{ label: string; description: string }> = [];
-                    for (const optionEntry of asArray(question.options) ?? []) {
-                      const option = asRecord(optionEntry);
-                      const label = asString(option?.label);
-                      const description = asString(option?.description);
-                      if (!label || !description) {
-                        continue;
-                      }
-                      options.push({ label, description });
-                    }
-
-                    if (options.length === 0) {
-                      continue;
-                    }
-
-                    normalizedQuestions.push({
-                      id: `opencode-${requestId}-${index + 1}`,
-                      header: asString(question.header) ?? `Question ${index + 1}`,
-                      question: prompt,
-                      options,
-                    });
-                  }
-
+                  const normalizedQuestions = normalizeOpenCodeUserInputQuestions({
+                    requestId,
+                    questions: rawQuestions,
+                  });
                   if (normalizedQuestions.length === 0) {
                     break;
                   }
@@ -1008,6 +1207,17 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                     break;
                   }
 
+                  const pendingState = pendingQuestions.get(requestId);
+                  if (!pendingState) {
+                    break;
+                  }
+                  const resolvedAnswers =
+                    type === "question.replied"
+                      ? buildOpenCodeResolvedUserInputAnswers({
+                          state: pendingState,
+                          rawAnswers: props.answers,
+                        })
+                      : {};
                   pendingQuestions.delete(requestId);
                   await Effect.runPromise(
                     emit({
@@ -1018,7 +1228,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                       requestId: RuntimeRequestId.makeUnsafe(requestId),
                       createdAt,
                       raw,
-                      payload: { answers: {} },
+                      payload: { answers: resolvedAnswers },
                     }),
                   );
                   break;
@@ -1573,35 +1783,39 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
             },
           });
 
-          const response = yield* requestJson<OpenCodeSendMessageResponse>({
-            method: "POST",
-            path: `/session/${context.sessionId}/message`,
-            cwd: context.cwd,
-            body: {
-              parts,
-              ...(model ? { model: { providerID: PROVIDER, modelID: model } } : {}),
-              ...(variant ? { variant } : {}),
-              agent: input.interactionMode === "plan" ? "plan" : "build",
-            },
+          const requestPayload = {
+            parts,
+            ...(model ? { model: { providerID: PROVIDER, modelID: model } } : {}),
+            ...(variant ? { variant } : {}),
+            agent: input.interactionMode === "plan" ? "plan" : "build",
+          } satisfies Record<string, unknown>;
+
+          yield* Effect.sync(() => {
+            void Effect.runFork(
+              requestJson<OpenCodeSendMessageResponse>({
+                method: "POST",
+                path: `/session/${context.sessionId}/message`,
+                cwd: context.cwd,
+                body: requestPayload,
+              }).pipe(
+                Effect.flatMap((response) =>
+                  finalizeSendTurnResponse({
+                    threadId: input.threadId,
+                    turnId,
+                    response,
+                  }),
+                ),
+                Effect.catchCause((cause) =>
+                  handleSendTurnRequestFailure({
+                    threadId: input.threadId,
+                    turnId,
+                    requestPayload,
+                    cause,
+                  }),
+                ),
+              ),
+            );
           });
-
-          yield* Effect.sleep("150 millis");
-
-          if (!turnState.sawStreamingActivity) {
-            yield* emitAssistantResponseFromMessage({
-              threadId: input.threadId,
-              turnId,
-              response,
-              mode: "fallback",
-            });
-          } else if (!turnState.assistantItemCompleted && context.activeTurnId === turnId) {
-            yield* emitAssistantResponseFromMessage({
-              threadId: input.threadId,
-              turnId,
-              response,
-              mode: "completion-only",
-            });
-          }
 
           return {
             threadId: input.threadId,
@@ -1648,19 +1862,9 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
             });
           }
 
-          const orderedAnswers = state.questionIds.map((questionId) => {
-            const answer = answers[questionId];
-            if (typeof answer === "string") {
-              return answer.trim().length > 0 ? [answer.trim()] : [];
-            }
-            if (Array.isArray(answer)) {
-              return answer.filter((entry): entry is string => typeof entry === "string");
-            }
-            if (answer && typeof answer === "object") {
-              const nested = asArray((answer as Record<string, unknown>).answers);
-              return nested?.filter((entry): entry is string => typeof entry === "string") ?? [];
-            }
-            return [];
+          const orderedAnswers = buildOpenCodeOrderedUserInputAnswers({
+            state,
+            answers,
           });
 
           yield* requestJson<unknown>({
@@ -1668,6 +1872,62 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
             path: `/question/${requestId}/reply`,
             cwd: context.cwd,
             body: { answers: orderedAnswers },
+            responseMode: "status-only",
+          });
+
+          let questionStillPending = true;
+          for (let attempt = 0; attempt < 6; attempt += 1) {
+            questionStillPending = yield* isQuestionStillPending({
+              requestId: String(requestId),
+              cwd: context.cwd,
+            }).pipe(Effect.orElseSucceed(() => true));
+            if (!questionStillPending) {
+              break;
+            }
+            if (attempt < 5) {
+              yield* Effect.sleep("150 millis");
+            }
+          }
+
+          if (questionStillPending) {
+            return yield* new ProviderAdapterValidationError({
+              provider: PROVIDER,
+              operation: "respondToUserInput",
+              issue: `OpenCode did not accept pending user-input request '${requestId}'.`,
+            });
+          }
+
+          if (!pendingQuestions.has(String(requestId))) {
+            return;
+          }
+
+          pendingQuestions.delete(String(requestId));
+          const createdAt = isoNow();
+          yield* emit({
+            type: "user-input.resolved",
+            eventId: EventId.makeUnsafe(randomUUID()),
+            provider: PROVIDER,
+            threadId,
+            requestId: RuntimeRequestId.makeUnsafe(String(requestId)),
+            createdAt,
+            raw: {
+              source: "opencode.server.question",
+              messageType: "question.replied",
+              payload: {
+                type: "question.replied",
+                properties: {
+                  sessionID: context.sessionId,
+                  requestID: String(requestId),
+                  answers: orderedAnswers,
+                },
+              },
+            },
+            payload: {
+              answers: buildOpenCodeResolvedUserInputAnswers({
+                state,
+                rawAnswers: orderedAnswers,
+              }),
+            },
           });
         }),
 

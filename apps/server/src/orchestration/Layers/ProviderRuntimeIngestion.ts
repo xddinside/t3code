@@ -98,6 +98,13 @@ function proposedPlanIdFromEvent(event: ProviderRuntimeEvent, threadId: ThreadId
   return `plan:${threadId}:event:${event.eventId}`;
 }
 
+function assistantMessageIdFromRuntimeEvent(event: ProviderRuntimeEvent): MessageId {
+  if (event.provider === "opencode" && event.turnId && event.itemId) {
+    return MessageId.makeUnsafe(`assistant:${event.turnId}:${event.itemId}`);
+  }
+  return MessageId.makeUnsafe(`assistant:${event.itemId ?? event.turnId ?? event.eventId}`);
+}
+
 function buildContextWindowActivityPayload(
   event: ProviderRuntimeEvent,
 ): ThreadTokenUsageSnapshot | undefined {
@@ -1006,9 +1013,7 @@ const make = Effect.fn("make")(function* () {
       event.type === "turn.proposed.delta" ? event.payload.delta : undefined;
 
     if (assistantDelta && assistantDelta.length > 0) {
-      const assistantMessageId = MessageId.makeUnsafe(
-        `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
-      );
+      const assistantMessageId = assistantMessageIdFromRuntimeEvent(event);
       const turnId = toTurnId(event.turnId);
       if (turnId) {
         yield* rememberAssistantMessageId(thread.id, turnId, assistantMessageId);
@@ -1058,9 +1063,7 @@ const make = Effect.fn("make")(function* () {
     const assistantCompletion =
       event.type === "item.completed" && event.payload.itemType === "assistant_message"
         ? {
-            messageId: MessageId.makeUnsafe(
-              `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
-            ),
+            messageId: assistantMessageIdFromRuntimeEvent(event),
             fallbackText: event.payload.detail,
           }
         : undefined;
@@ -1232,9 +1235,7 @@ const make = Effect.fn("make")(function* () {
         if (thread.checkpoints.some((c) => c.turnId === turnId)) {
           // Already tracked; no-op.
         } else {
-          const assistantMessageId = MessageId.makeUnsafe(
-            `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
-          );
+          const assistantMessageId = assistantMessageIdFromRuntimeEvent(event);
           const maxTurnCount = thread.checkpoints.reduce(
             (max, c) => Math.max(max, c.checkpointTurnCount),
             0,

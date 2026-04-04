@@ -142,6 +142,19 @@ export function deriveComposerSendState(options: {
   };
 }
 
+export function shouldBlockComposerSubmit(input: {
+  hasPendingUserInput: boolean;
+  isSendBusy: boolean;
+  isConnecting: boolean;
+  sendInFlight: boolean;
+}): boolean {
+  if (input.hasPendingUserInput) {
+    return false;
+  }
+
+  return input.isSendBusy || input.isConnecting || input.sendInFlight;
+}
+
 export function buildExpiredTerminalContextToastCopy(
   expiredTerminalContextCount: number,
   variant: "omitted" | "empty",

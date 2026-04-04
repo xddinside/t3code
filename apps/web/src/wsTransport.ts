@@ -35,6 +35,30 @@ const isWebSocketResponseEnvelope = Schema.is(WebSocketResponse);
 const isWsPushMessage = (value: WsResponseMessage): value is WsPush =>
   "type" in value && value.type === "push";
 
+function resolveWebSocketUrl(url?: string): string {
+  const bridgeUrl = window.desktopBridge?.getWsUrl();
+  const envUrl = import.meta.env.VITE_WS_URL as string | undefined;
+  const baseUrl =
+    url ??
+    (bridgeUrl && bridgeUrl.length > 0
+      ? bridgeUrl
+      : envUrl && envUrl.length > 0
+        ? envUrl
+        : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:${window.location.port}`);
+
+  try {
+    const resolved = new URL(baseUrl, window.location.href);
+    const pageUrl = new URL(window.location.href);
+    const token = pageUrl.searchParams.get("token");
+    if (token && !resolved.searchParams.has("token")) {
+      resolved.searchParams.set("token", token);
+    }
+    return resolved.toString();
+  } catch {
+    return baseUrl;
+  }
+}
+
 interface WsRequestEnvelope {
   id: string;
   body: {
@@ -64,15 +88,7 @@ export class WsTransport {
   private readonly url: string;
 
   constructor(url?: string) {
-    const bridgeUrl = window.desktopBridge?.getWsUrl();
-    const envUrl = import.meta.env.VITE_WS_URL as string | undefined;
-    this.url =
-      url ??
-      (bridgeUrl && bridgeUrl.length > 0
-        ? bridgeUrl
-        : envUrl && envUrl.length > 0
-          ? envUrl
-          : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:${window.location.port}`);
+    this.url = resolveWebSocketUrl(url);
     this.connect();
   }
 

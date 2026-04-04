@@ -9,6 +9,8 @@
 import { Effect, FileSystem, Layer, Path, ServiceMap } from "effect";
 
 export const DEFAULT_PORT = 3773;
+export const DEFAULT_STATE_PROFILE = "userdata";
+export const DEVELOPMENT_STATE_PROFILE = "dev";
 
 export type RuntimeMode = "web" | "desktop";
 
@@ -39,6 +41,7 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly host: string | undefined;
   readonly cwd: string;
   readonly baseDir: string;
+  readonly stateProfile: string;
   readonly staticDir: string | undefined;
   readonly devUrl: URL | undefined;
   readonly noBrowser: boolean;
@@ -50,9 +53,12 @@ export interface ServerConfigShape extends ServerDerivedPaths {
 export const deriveServerPaths = Effect.fn(function* (
   baseDir: ServerConfigShape["baseDir"],
   devUrl: ServerConfigShape["devUrl"],
+  stateProfile?: ServerConfigShape["stateProfile"],
 ): Effect.fn.Return<ServerDerivedPaths, never, Path.Path> {
   const { join } = yield* Path.Path;
-  const stateDir = join(baseDir, devUrl !== undefined ? "dev" : "userdata");
+  const resolvedStateProfile =
+    stateProfile ?? (devUrl !== undefined ? DEVELOPMENT_STATE_PROFILE : DEFAULT_STATE_PROFILE);
+  const stateDir = join(baseDir, resolvedStateProfile);
   const dbPath = join(stateDir, "state.sqlite");
   const attachmentsDir = join(stateDir, "attachments");
   const logsDir = join(stateDir, "logs");
@@ -105,6 +111,7 @@ export class ServerConfig extends ServiceMap.Service<ServerConfig, ServerConfigS
           logWebSocketEvents: false,
           port: 0,
           host: undefined,
+          stateProfile: DEFAULT_STATE_PROFILE,
           authToken: undefined,
           staticDir: undefined,
           devUrl,

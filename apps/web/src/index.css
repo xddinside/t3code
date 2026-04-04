@@ -246,6 +246,11 @@ label:has(> select#reasoning-effort) select {
   word-break: break-word;
 }
 
+.chat-markdown.chat-markdown-has-table {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .chat-markdown > :first-child {
   margin-top: 0;
 }
@@ -259,7 +264,8 @@ label:has(> select#reasoning-effort) select {
 .chat-markdown ol,
 .chat-markdown blockquote,
 .chat-markdown pre,
-.chat-markdown table {
+.chat-markdown table,
+.chat-markdown .chat-markdown-table-wrap {
   margin: 0.65rem 0;
 }
 
@@ -381,16 +387,45 @@ label:has(> select#reasoning-effort) select {
   background: color-mix(in srgb, var(--muted) 78%, var(--background)) !important;
 }
 
-.chat-markdown table {
-  width: 100%;
+.chat-markdown .chat-markdown-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--card) 82%, var(--background));
+}
+
+.chat-markdown .chat-markdown-table-wrap table {
+  margin: 0;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    Courier New,
+    monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.chat-markdown .chat-markdown-table-wrap thead {
+  background: color-mix(in srgb, var(--muted) 82%, var(--background));
 }
 
 .chat-markdown th,
 .chat-markdown td {
   border: 1px solid var(--border);
-  padding: 0.35rem 0.45rem;
+  padding: 0.5rem 0.65rem;
   text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
 }
 
 /* Diffs theme bridge (match diff surfaces to app palette) */
