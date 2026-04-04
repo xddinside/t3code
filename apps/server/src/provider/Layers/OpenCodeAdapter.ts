@@ -126,6 +126,10 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+export function asContentString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
 function asArray(value: unknown): ReadonlyArray<unknown> | undefined {
   return Array.isArray(value) ? value : undefined;
 }
@@ -570,7 +574,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
 
           if (partType === "reasoning") {
             partKinds.set(partId, "reasoning");
-            const reasoningText = asString(part.text);
+            const reasoningText = asContentString(part.text);
             if (reasoningText && mode === "fallback") {
               yield* emit({
                 type: "content.delta",
@@ -596,7 +600,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
 
           if (partType === "text") {
             partKinds.set(partId, "text");
-            const text = asString(part.text);
+            const text = asContentString(part.text);
             yield* ensureAssistantItemStarted(partId);
             if (text && mode === "fallback") {
               yield* emit({
@@ -1300,7 +1304,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                   }
 
                   const partId = asString(props.partID);
-                  const delta = asString(props.delta) ?? "";
+                  const delta = asContentString(props.delta) ?? "";
                   if (!partId || delta.length === 0) {
                     break;
                   }
@@ -1433,8 +1437,8 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                     );
                   } else if (partType === "patch") {
                     const unifiedDiff =
-                      asString(part.diff) ??
-                      asString(part.patch) ??
+                      asContentString(part.diff) ??
+                      asContentString(part.patch) ??
                       JSON.stringify(asArray(part.files) ?? []);
 
                     await Effect.runPromise(

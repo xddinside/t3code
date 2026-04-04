@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  asContentString,
   buildOpenCodeOrderedUserInputAnswers,
   buildOpenCodeResolvedUserInputAnswers,
   listOpenCodePendingQuestionRequestIds,
@@ -122,5 +123,14 @@ describe("OpenCodeAdapter helpers", () => {
         { bad: true },
       ]),
     ).toEqual(["que_123", "que_456"]);
+  });
+
+  it("preserves significant whitespace for assistant markdown content", () => {
+    expect(asContentString(" hello\n\n## Heading\n")).toBe(" hello\n\n## Heading\n");
+  });
+
+  it("rejects empty content strings while keeping whitespace-only chunks", () => {
+    expect(asContentString("")).toBeUndefined();
+    expect(asContentString(" \n")).toBe(" \n");
   });
 });
