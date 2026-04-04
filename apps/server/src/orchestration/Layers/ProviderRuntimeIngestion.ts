@@ -1045,12 +1045,6 @@ const make = Effect.fn("make")(function* () {
           delta: assistantDelta,
           ...(turnId ? { turnId } : {}),
           createdAt: now,
-          commandTag: "assistant-complete",
-          finalDeltaCommandTag: "assistant-delta-finalize",
-          allowEmptyCompletion: existingAssistantMessage !== undefined,
-          ...(assistantCompletion.fallbackText !== undefined && shouldApplyFallbackCompletionText
-            ? { fallbackText: assistantCompletion.fallbackText }
-            : {}),
         });
       }
     }
@@ -1153,38 +1147,38 @@ const make = Effect.fn("make")(function* () {
       }
     }
 
-      if (event.type === "turn.completed") {
-        const turnId = toTurnId(event.turnId);
-        if (turnId) {
-          const assistantMessageIds = yield* getAssistantMessageIdsForTurn(thread.id, turnId);
-          yield* Effect.forEach(
-            assistantMessageIds,
-            (assistantMessageId) =>
-              finalizeAssistantMessage({
-                event,
-                threadId: thread.id,
-                messageId: assistantMessageId,
-                turnId,
-                createdAt: now,
-                commandTag: "assistant-complete-finalize",
-                finalDeltaCommandTag: "assistant-delta-finalize-fallback",
-                allowEmptyCompletion: thread.messages.some(
-                  (entry) => entry.id === assistantMessageId,
-                ),
-              }),
-            { concurrency: 1 },
-          ).pipe(Effect.asVoid);
-          yield* clearAssistantMessageIdsForTurn(thread.id, turnId);
-          yield* finalizeBufferedProposedPlan({
-            event,
-            threadId: thread.id,
-            threadProposedPlans: thread.proposedPlans,
-            planId: proposedPlanIdForTurn(thread.id, turnId),
-            turnId,
-            updatedAt: now,
-          });
-        }
+    if (event.type === "turn.completed") {
+      const turnId = toTurnId(event.turnId);
+      if (turnId) {
+        const assistantMessageIds = yield* getAssistantMessageIdsForTurn(thread.id, turnId);
+        yield* Effect.forEach(
+          assistantMessageIds,
+          (assistantMessageId) =>
+            finalizeAssistantMessage({
+              event,
+              threadId: thread.id,
+              messageId: assistantMessageId,
+              turnId,
+              createdAt: now,
+              commandTag: "assistant-complete-finalize",
+              finalDeltaCommandTag: "assistant-delta-finalize-fallback",
+              allowEmptyCompletion: thread.messages.some(
+                (entry) => entry.id === assistantMessageId,
+              ),
+            }),
+          { concurrency: 1 },
+        ).pipe(Effect.asVoid);
+        yield* clearAssistantMessageIdsForTurn(thread.id, turnId);
+        yield* finalizeBufferedProposedPlan({
+          event,
+          threadId: thread.id,
+          threadProposedPlans: thread.proposedPlans,
+          planId: proposedPlanIdForTurn(thread.id, turnId),
+          turnId,
+          updatedAt: now,
+        });
       }
+    }
 
     if (event.type === "session.exited") {
       yield* clearTurnStateForSession(thread.id);

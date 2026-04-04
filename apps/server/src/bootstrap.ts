@@ -163,7 +163,6 @@ const isBootstrapFdPathDuplicationError = Predicate.compose(
     _.code === "ENOENT" ||
     _.code === "EBADF",
 );
-);
 
 export function resolveFdPath(
   fd: number,
