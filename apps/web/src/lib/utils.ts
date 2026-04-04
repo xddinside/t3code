@@ -71,5 +71,16 @@ export const resolveServerUrl = (options?: {
   if (options?.searchParams) {
     parsedUrl.search = new URLSearchParams(options.searchParams).toString();
   }
+
+  try {
+    const pageUrl = new URL(window.location.href || window.location.origin);
+    const token = pageUrl.searchParams.get("token");
+    if (token && !parsedUrl.searchParams.has("token")) {
+      parsedUrl.searchParams.set("token", token);
+    }
+  } catch {
+    // Ignore malformed page URLs and keep the resolved server URL as-is.
+  }
+
   return parsedUrl.toString();
 };

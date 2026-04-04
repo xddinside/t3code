@@ -1,13 +1,37 @@
 import {
+  CLAUDE_CODE_EFFORT_OPTIONS,
+  CODEX_REASONING_EFFORT_OPTIONS,
   DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_REASONING_EFFORT_BY_PROVIDER,
+  MODEL_OPTIONS_BY_PROVIDER,
   MODEL_SLUG_ALIASES_BY_PROVIDER,
+  OPENCODE_REASONING_EFFORT_OPTIONS,
+  REASONING_EFFORT_OPTIONS_BY_PROVIDER,
   type ClaudeCodeEffort,
   type ClaudeModelOptions,
   type CodexModelOptions,
+  type CodexReasoningEffort,
   type ModelCapabilities,
   type ModelSelection,
+  type OpenCodeModelOptions,
+  type OpenCodeReasoningEffort,
   type ProviderKind,
+  type ProviderReasoningEffort,
 } from "@t3tools/contracts";
+
+const MODEL_SLUG_SET_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>> = {
+  claudeAgent: new Set(MODEL_OPTIONS_BY_PROVIDER.claudeAgent.map((option) => option.slug)),
+  codex: new Set(MODEL_OPTIONS_BY_PROVIDER.codex.map((option) => option.slug)),
+  opencode: new Set(MODEL_OPTIONS_BY_PROVIDER.opencode.map((option) => option.slug)),
+};
+
+function hasKnownModelSlug(provider: ProviderKind, slug: string): boolean {
+  return (MODEL_SLUG_SET_BY_PROVIDER[provider] as ReadonlySet<string>).has(slug);
+}
+
+const CLAUDE_OPUS_4_6_MODEL = "claude-opus-4-6";
+const CLAUDE_SONNET_4_6_MODEL = "claude-sonnet-4-6";
+const CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5";
 
 export interface SelectableModelOption {
   slug: string;
@@ -302,6 +326,168 @@ export function resolveApiModelId(modelSelection: ModelSelection): string {
   }
 }
 
+export function supportsClaudeMaxEffort(model: string | null | undefined): boolean {
+  const normalized = normalizeModelSlug(model, "claudeAgent");
+  return normalized === CLAUDE_OPUS_4_6_MODEL;
+}
+
+export function supportsClaudeUltrathinkKeyword(model: string | null | undefined): boolean {
+  const normalized = normalizeModelSlug(model, "claudeAgent");
+  return normalized === CLAUDE_OPUS_4_6_MODEL || normalized === CLAUDE_SONNET_4_6_MODEL;
+}
+
+export function supportsClaudeThinkingToggle(model: string | null | undefined): boolean {
+  const normalized = normalizeModelSlug(model, "claudeAgent");
+  return normalized === CLAUDE_HAIKU_4_5_MODEL;
+}
+
+export function supportsClaudeFastMode(model: string | null | undefined): boolean {
+  const normalized = normalizeModelSlug(model, "claudeAgent");
+  return normalized === CLAUDE_OPUS_4_6_MODEL;
+}
+
+export function getReasoningEffortOptions(provider: "codex"): ReadonlyArray<CodexReasoningEffort>;
+export function getReasoningEffortOptions(
+  provider: "claudeAgent",
+  model?: string | null | undefined,
+): ReadonlyArray<ClaudeCodeEffort>;
+export function getReasoningEffortOptions(
+  provider: "opencode",
+  model?: string | null | undefined,
+): ReadonlyArray<OpenCodeReasoningEffort>;
+export function getReasoningEffortOptions(
+  provider?: ProviderKind,
+  model?: string | null | undefined,
+): ReadonlyArray<ProviderReasoningEffort>;
+export function getReasoningEffortOptions(
+  provider: ProviderKind = "codex",
+  model?: string | null | undefined,
+): ReadonlyArray<ProviderReasoningEffort> {
+  if (provider === "claudeAgent" && supportsClaudeMaxEffort(model)) {
+    return ["low", "medium", "high", "max", "ultrathink"];
+  }
+  return REASONING_EFFORT_OPTIONS_BY_PROVIDER[provider];
+}
+
+export function getDefaultReasoningEffort(provider: "codex"): CodexReasoningEffort;
+export function getDefaultReasoningEffort(provider: "claudeAgent"): ClaudeCodeEffort;
+export function getDefaultReasoningEffort(provider: "opencode"): OpenCodeReasoningEffort;
+export function getDefaultReasoningEffort(provider?: ProviderKind): ProviderReasoningEffort;
+export function getDefaultReasoningEffort(
+  provider: ProviderKind = "codex",
+): ProviderReasoningEffort {
+  return DEFAULT_REASONING_EFFORT_BY_PROVIDER[provider];
+}
+
+export function resolveReasoningEffortForProvider(
+  provider: "codex",
+  effort: string | null | undefined,
+): CodexReasoningEffort | null;
+export function resolveReasoningEffortForProvider(
+  provider: "claudeAgent",
+  effort: string | null | undefined,
+): ClaudeCodeEffort | null;
+export function resolveReasoningEffortForProvider(
+  provider: "opencode",
+  effort: string | null | undefined,
+): OpenCodeReasoningEffort | null;
+export function resolveReasoningEffortForProvider(
+  provider: ProviderKind,
+  effort: string | null | undefined,
+): ProviderReasoningEffort | null;
+export function resolveReasoningEffortForProvider(
+  provider: ProviderKind,
+  effort: string | null | undefined,
+): ProviderReasoningEffort | null {
+  if (typeof effort !== "string") {
+    return null;
+  }
+
+  const trimmed = effort.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const options = REASONING_EFFORT_OPTIONS_BY_PROVIDER[provider] as ReadonlyArray<string>;
+  return options.includes(trimmed) ? (trimmed as ProviderReasoningEffort) : null;
+}
+
+export function getEffectiveClaudeCodeEffort(
+  effort: ClaudeCodeEffort | null | undefined,
+): Exclude<ClaudeCodeEffort, "ultrathink"> | null {
+  if (!effort) {
+    return null;
+  }
+  return effort === "ultrathink" ? null : effort;
+}
+
+export function normalizeCodexModelOptions(
+  modelOptions: CodexModelOptions | null | undefined,
+): CodexModelOptions | undefined {
+  const defaultReasoningEffort = getDefaultReasoningEffort("codex");
+  const reasoningEffort =
+    resolveReasoningEffortForProvider("codex", modelOptions?.reasoningEffort) ??
+    defaultReasoningEffort;
+  const fastModeEnabled = modelOptions?.fastMode === true;
+  const nextOptions: CodexModelOptions = {
+    ...(reasoningEffort !== defaultReasoningEffort ? { reasoningEffort } : {}),
+    ...(fastModeEnabled ? { fastMode: true } : {}),
+  };
+  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
+}
+
+export function normalizeClaudeModelOptions(
+  model: string | null | undefined,
+  modelOptions: ClaudeModelOptions | null | undefined,
+): ClaudeModelOptions | undefined {
+  const reasoningOptions = getReasoningEffortOptions("claudeAgent", model);
+  const defaultReasoningEffort = getDefaultReasoningEffort("claudeAgent");
+  const resolvedEffort = resolveReasoningEffortForProvider("claudeAgent", modelOptions?.effort);
+  const effort =
+    resolvedEffort &&
+    resolvedEffort !== "ultrathink" &&
+    reasoningOptions.includes(resolvedEffort) &&
+    resolvedEffort !== defaultReasoningEffort
+      ? resolvedEffort
+      : undefined;
+  const thinking =
+    supportsClaudeThinkingToggle(model) && modelOptions?.thinking === false ? false : undefined;
+  const fastMode =
+    supportsClaudeFastMode(model) && modelOptions?.fastMode === true ? true : undefined;
+  const nextOptions: ClaudeModelOptions = {
+    ...(thinking === false ? { thinking: false } : {}),
+    ...(effort ? { effort } : {}),
+    ...(fastMode ? { fastMode: true } : {}),
+  };
+  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
+}
+
+export function normalizeOpenCodeModelOptions(
+  modelOptions: OpenCodeModelOptions | null | undefined,
+  allowedVariants?: ReadonlyArray<string> | null | undefined,
+): OpenCodeModelOptions | undefined {
+  const rawVariant = modelOptions?.variant;
+  const resolvedVariant = typeof rawVariant === "string" ? rawVariant.trim() : undefined;
+  if (!resolvedVariant) {
+    return undefined;
+  }
+
+  if (
+    allowedVariants &&
+    allowedVariants.length > 0 &&
+    !allowedVariants.some((variant) => variant.toLowerCase() === resolvedVariant.toLowerCase())
+  ) {
+    return undefined;
+  }
+
+  const defaultVariant = getDefaultReasoningEffort("opencode");
+  if (resolvedVariant === defaultVariant) {
+    return undefined;
+  }
+
+  return { variant: resolvedVariant };
+}
+
 export function applyClaudePromptEffortPrefix(
   text: string,
   effort: ClaudeCodeEffort | null | undefined,
@@ -318,3 +504,9 @@ export function applyClaudePromptEffortPrefix(
   }
   return `Ultrathink:\n${trimmed}`;
 }
+
+export {
+  CLAUDE_CODE_EFFORT_OPTIONS,
+  CODEX_REASONING_EFFORT_OPTIONS,
+  OPENCODE_REASONING_EFFORT_OPTIONS,
+};

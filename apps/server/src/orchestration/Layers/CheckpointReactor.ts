@@ -132,7 +132,6 @@ const make = Effect.gen(function* () {
       createdAt: input.createdAt,
     });
 
-  const resolveSessionRuntimeForThread = Effect.fn("resolveSessionRuntimeForThread")(function* (
   const reportCaptureFailure = (input: {
     readonly threadId: ThreadId;
     readonly turnId: TurnId | null;

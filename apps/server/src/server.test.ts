@@ -27,7 +27,7 @@ import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import { vi } from "vitest";
 
 import type { ServerConfigShape } from "./config.ts";
-import { deriveServerPaths, ServerConfig } from "./config.ts";
+import { DEFAULT_STATE_PROFILE, deriveServerPaths, ServerConfig } from "./config.ts";
 import { makeRoutesLayer } from "./server.ts";
 import { resolveAttachmentRelativePath } from "./attachmentPaths.ts";
 import {
@@ -147,7 +147,8 @@ const buildAppUnderTest = (options?: {
     const tempBaseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-router-test-" });
     const baseDir = options?.config?.baseDir ?? tempBaseDir;
     const devUrl = options?.config?.devUrl;
-    const derivedPaths = yield* deriveServerPaths(baseDir, devUrl);
+    const stateProfile = options?.config?.stateProfile ?? DEFAULT_STATE_PROFILE;
+    const derivedPaths = yield* deriveServerPaths(baseDir, devUrl, stateProfile);
     const config: ServerConfigShape = {
       logLevel: "Info",
       traceMinLevel: "Info",
@@ -164,6 +165,7 @@ const buildAppUnderTest = (options?: {
       host: "127.0.0.1",
       cwd: process.cwd(),
       baseDir,
+      stateProfile,
       ...derivedPaths,
       staticDir: undefined,
       devUrl,

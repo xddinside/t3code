@@ -10,6 +10,7 @@
  * @module RoutingTextGeneration
  */
 import { Effect, Layer, ServiceMap } from "effect";
+import type { ProviderKind } from "@t3tools/contracts";
 
 import {
   TextGeneration,
@@ -31,6 +32,9 @@ class ClaudeTextGen extends ServiceMap.Service<ClaudeTextGen, TextGenerationShap
   "t3/git/Layers/RoutingTextGeneration/ClaudeTextGen",
 ) {}
 
+const toTextGenerationProvider = (provider: ProviderKind): TextGenerationProvider =>
+  provider === "claudeAgent" ? "claudeAgent" : "codex";
+
 // ---------------------------------------------------------------------------
 // Routing implementation
 // ---------------------------------------------------------------------------
@@ -44,10 +48,13 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
 
   return {
     generateCommitMessage: (input) =>
-      route(input.modelSelection.provider).generateCommitMessage(input),
-    generatePrContent: (input) => route(input.modelSelection.provider).generatePrContent(input),
-    generateBranchName: (input) => route(input.modelSelection.provider).generateBranchName(input),
-    generateThreadTitle: (input) => route(input.modelSelection.provider).generateThreadTitle(input),
+      route(toTextGenerationProvider(input.modelSelection.provider)).generateCommitMessage(input),
+    generatePrContent: (input) =>
+      route(toTextGenerationProvider(input.modelSelection.provider)).generatePrContent(input),
+    generateBranchName: (input) =>
+      route(toTextGenerationProvider(input.modelSelection.provider)).generateBranchName(input),
+    generateThreadTitle: (input) =>
+      route(toTextGenerationProvider(input.modelSelection.provider)).generateThreadTitle(input),
   } satisfies TextGenerationShape;
 });
 

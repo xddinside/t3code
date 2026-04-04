@@ -90,7 +90,7 @@ describe("OpenCodeAdapter sendTurn", () => {
       }
 
       throw new Error(`Unexpected fetch request: ${init?.method ?? "GET"} ${url.toString()}`);
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const layer = makeOpenCodeAdapterLive().pipe(
       Layer.provideMerge(

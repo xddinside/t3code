@@ -126,6 +126,7 @@ describe("WsTransport", () => {
   it("uses wss when falling back to an https page origin", async () => {
     Object.assign(window.location, {
       origin: "https://app.example.com",
+      href: "https://app.example.com/",
       hostname: "app.example.com",
       port: "",
       protocol: "https:",
@@ -138,6 +139,44 @@ describe("WsTransport", () => {
     });
 
     expect(getSocket().url).toBe("wss://app.example.com/ws");
+    await transport.dispose();
+  });
+
+  it("forwards the page token query param to websocket connections", async () => {
+    Object.assign(window.location, {
+      origin: "https://remote.example.com",
+      href: "https://remote.example.com/?token=secret-token",
+      hostname: "remote.example.com",
+      port: "",
+      protocol: "https:",
+    });
+
+    const transport = new WsTransport();
+
+    await waitFor(() => {
+      expect(sockets).toHaveLength(1);
+    });
+
+    expect(getSocket().url).toBe("wss://remote.example.com/ws?token=secret-token");
+    await transport.dispose();
+  });
+
+  it("does not overwrite an explicit websocket token query param", async () => {
+    Object.assign(window.location, {
+      origin: "https://remote.example.com",
+      href: "https://remote.example.com/?token=page-token",
+      hostname: "remote.example.com",
+      port: "",
+      protocol: "https:",
+    });
+
+    const transport = new WsTransport("wss://remote.example.com/socket?token=explicit-token");
+
+    await waitFor(() => {
+      expect(sockets).toHaveLength(1);
+    });
+
+    expect(getSocket().url).toBe("wss://remote.example.com/ws?token=explicit-token");
     await transport.dispose();
   });
 

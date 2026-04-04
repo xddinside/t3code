@@ -4,7 +4,9 @@ import { Config, Effect, FileSystem, LogLevel, Option, Path, Schema } from "effe
 import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
 
 import {
+  DEFAULT_STATE_PROFILE,
   DEFAULT_PORT,
+  DEVELOPMENT_STATE_PROFILE,
   deriveServerPaths,
   ensureServerDirectories,
   resolveStaticDir,
@@ -229,7 +231,8 @@ export const resolveServerConfig = (
     const rawCwd = Option.getOrElse(flags.cwd, () => process.cwd());
     const cwd = path.resolve(yield* expandHomePath(rawCwd.trim()));
     yield* fs.makeDirectory(cwd, { recursive: true });
-    const derivedPaths = yield* deriveServerPaths(baseDir, devUrl);
+    const stateProfile = devUrl ? DEVELOPMENT_STATE_PROFILE : DEFAULT_STATE_PROFILE;
+    const derivedPaths = yield* deriveServerPaths(baseDir, devUrl, stateProfile);
     yield* ensureServerDirectories(derivedPaths);
     const persistedObservabilitySettings = yield* loadPersistedObservabilitySettings(
       derivedPaths.settingsPath,
@@ -321,6 +324,7 @@ export const resolveServerConfig = (
       port,
       cwd,
       baseDir,
+      stateProfile,
       ...derivedPaths,
       serverTracePath,
       host,
