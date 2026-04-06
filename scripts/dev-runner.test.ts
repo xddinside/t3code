@@ -46,7 +46,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   });
 
   describe("createDevRunnerEnv", () => {
-    it.effect("defaults T3CODE_HOME to ~/.t3 when not provided", () =>
+    it.effect("defaults T3CODE_HOME to ~/.t3-remote-opencode when not provided", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
@@ -64,7 +64,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.T3CODE_HOME, resolve(homedir(), ".t3"));
+        assert.equal(env.T3CODE_HOME, resolve(homedir(), ".t3-remote-opencode"));
         assert.equal(env.T3CODE_STATE_PROFILE, "dev");
       }),
     );
@@ -181,6 +181,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
             T3CODE_MODE: "web",
             T3CODE_NO_BROWSER: "0",
             T3CODE_HOST: "0.0.0.0",
+            T3CODE_DESKTOP_WS_URL: "ws://100.64.0.10:3773/?token=shared-token",
             VITE_WS_URL: "ws://localhost:3773",
           },
           serverOffset: 0,
@@ -206,6 +207,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         assert.equal(env.T3CODE_MODE, undefined);
         assert.equal(env.T3CODE_NO_BROWSER, undefined);
         assert.equal(env.T3CODE_HOST, undefined);
+        assert.equal(env.T3CODE_DESKTOP_WS_URL, "ws://100.64.0.10:3773/?token=shared-token");
         assert.equal(env.VITE_WS_URL, undefined);
       }),
     );

@@ -15,7 +15,7 @@ const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
-  path.join(homedir(), ".t3"),
+  path.join(homedir(), ".t3-remote-opencode"),
 );
 
 const MODE_ARGS = {
@@ -216,7 +216,7 @@ export function createDevRunnerEnv({
       delete output.T3CODE_DESKTOP_WS_URL;
     }
 
-    if (isDesktopMode) {
+    if (!isDesktopMode) {
       delete output.T3CODE_DESKTOP_WS_URL;
     }
 

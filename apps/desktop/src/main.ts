@@ -64,6 +64,7 @@ const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
+const EXTERNAL_BACKEND_WS_URL = process.env.T3CODE_DESKTOP_WS_URL?.trim() || "";
 const STATE_PROFILE =
   process.env.T3CODE_STATE_PROFILE?.trim() || (isDevelopment ? "dev" : "userdata");
 const STATE_DIR = Path.join(BASE_DIR, STATE_PROFILE);
@@ -1020,6 +1021,7 @@ function scheduleBackendRestart(reason: string): void {
 }
 
 function startBackend(): void {
+  if (EXTERNAL_BACKEND_WS_URL) return;
   if (isQuitting || backendProcess) return;
 
   backendObservabilitySettings = readPersistedBackendObservabilitySettings();
@@ -1450,16 +1452,23 @@ if (!hasSingleInstanceLock) {
 
 async function bootstrap(): Promise<void> {
   writeDesktopLogHeader("bootstrap start");
-  backendPort = await Effect.service(NetService).pipe(
-    Effect.flatMap((net) => net.reserveLoopbackPort()),
-    Effect.provide(NetService.layer),
-    Effect.runPromise,
-  );
-  writeDesktopLogHeader(`reserved backend port via NetService port=${backendPort}`);
-  backendAuthToken = Crypto.randomBytes(24).toString("hex");
-  const baseUrl = `ws://127.0.0.1:${backendPort}`;
-  backendWsUrl = `${baseUrl}/?token=${encodeURIComponent(backendAuthToken)}`;
-  writeDesktopLogHeader(`bootstrap resolved websocket endpoint baseUrl=${baseUrl}`);
+  if (EXTERNAL_BACKEND_WS_URL) {
+    backendPort = 0;
+    backendAuthToken = "";
+    backendWsUrl = EXTERNAL_BACKEND_WS_URL;
+    writeDesktopLogHeader(`bootstrap using external websocket url=${backendWsUrl}`);
+  } else {
+    backendPort = await Effect.service(NetService).pipe(
+      Effect.flatMap((net) => net.reserveLoopbackPort()),
+      Effect.provide(NetService.layer),
+      Effect.runPromise,
+    );
+    writeDesktopLogHeader(`reserved backend port via NetService port=${backendPort}`);
+    backendAuthToken = Crypto.randomBytes(24).toString("hex");
+    const baseUrl = `ws://127.0.0.1:${backendPort}`;
+    backendWsUrl = `${baseUrl}/?token=${encodeURIComponent(backendAuthToken)}`;
+    writeDesktopLogHeader(`bootstrap resolved websocket endpoint baseUrl=${baseUrl}`);
+  }
 
   registerIpcHandlers();
   writeDesktopLogHeader("bootstrap ipc handlers registered");
