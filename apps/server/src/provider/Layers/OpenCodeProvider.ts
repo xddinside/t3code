@@ -28,6 +28,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     slug: "minimax-m2.5-free",
     name: "MiniMax M2.5 Free",
     isCustom: false,
+    contextLimitTokens: 204_800,
     capabilities: {
       reasoningEffortLevels: [
         { value: "low", label: "Low" },
@@ -44,6 +45,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     slug: "mimo-v2-pro-free",
     name: "MiMo V2 Pro Free",
     isCustom: false,
+    contextLimitTokens: 1_048_576,
     capabilities: {
       reasoningEffortLevels: [
         { value: "low", label: "Low" },
@@ -60,6 +62,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     slug: "qwen3.6-plus-free",
     name: "Qwen 3.6 Plus Free",
     isCustom: false,
+    contextLimitTokens: 1_048_576,
     capabilities: {
       reasoningEffortLevels: [
         { value: "low", label: "Low" },

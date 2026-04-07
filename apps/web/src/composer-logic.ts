@@ -1,7 +1,7 @@
 import { splitPromptIntoComposerSegments } from "./composer-editor-mentions";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 
-export type ComposerTriggerKind = "path" | "slash-command" | "slash-model";
+export type ComposerTriggerKind = "path" | "slash-command" | "slash-model" | "skill";
 export type ComposerSlashCommand = "model" | "plan" | "default";
 
 export interface ComposerTrigger {
@@ -221,6 +221,27 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
         rangeEnd: cursor,
       };
     }
+  }
+
+  // Check for $skill trigger
+  const skillTokenStart = tokenStartForCursor(text, cursor);
+  const skillToken = text.slice(skillTokenStart, cursor);
+  if (skillToken.startsWith("$")) {
+    return {
+      kind: "skill",
+      query: skillToken.slice(1),
+      rangeStart: skillTokenStart,
+      rangeEnd: cursor,
+    };
+  }
+  // Check if preceded by $ (e.g., after typing characters)
+  if (skillTokenStart > 0 && text[skillTokenStart - 1] === "$") {
+    return {
+      kind: "skill",
+      query: text.slice(skillTokenStart, cursor),
+      rangeStart: skillTokenStart - 1,
+      rangeEnd: cursor,
+    };
   }
 
   const tokenStart = tokenStartForCursor(text, cursor);

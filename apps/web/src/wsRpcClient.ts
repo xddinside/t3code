@@ -5,6 +5,7 @@ import {
   type NativeApi,
   ORCHESTRATION_WS_METHODS,
   type ServerSettingsPatch,
+  type Skill,
   WS_METHODS,
 } from "@t3tools/contracts";
 import { Effect, Stream } from "effect";
@@ -92,6 +93,9 @@ export interface WsRpcClient {
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
     readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
     readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
+  };
+  readonly skills: {
+    readonly list: (input?: { cwd?: string; provider?: "codex" | "claudeAgent" | "opencode" }) => Promise<Array<Skill>>;
   };
 }
 
@@ -202,6 +206,17 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
           (client) => client[WS_METHODS.subscribeOrchestrationDomainEvents]({}),
           listener,
         ),
+    },
+    skills: {
+      list: (input) =>
+        transport.request(
+          (client) =>
+            client[WS_METHODS.skillsList](input ?? {}) as unknown as Effect.Effect<
+              ReadonlyArray<Skill>,
+              Error,
+              never
+            >,
+        ).then((skills) => [...skills]),
     },
   };
 }

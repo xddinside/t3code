@@ -56,6 +56,15 @@ export function getProviderModelCapabilities(
   return models.find((candidate) => candidate.slug === slug)?.capabilities ?? EMPTY_CAPABILITIES;
 }
 
+export function getProviderModelContextLimit(
+  models: ReadonlyArray<ServerProviderModel>,
+  model: string | null | undefined,
+  provider: ProviderKind,
+): number | null {
+  const slug = normalizeModelSlug(model, provider);
+  return models.find((candidate) => candidate.slug === slug)?.contextLimitTokens ?? null;
+}
+
 export function getDefaultServerModel(
   providers: ReadonlyArray<ServerProvider>,
   provider: ProviderKind,

@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import {
   IsoDateTime,
   NonNegativeInt,
+  PositiveInt,
   ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
@@ -53,6 +54,7 @@ export const ServerProviderModel = Schema.Struct({
   name: TrimmedNonEmptyString,
   isCustom: Schema.Boolean,
   capabilities: Schema.NullOr(ModelCapabilities),
+  contextLimitTokens: Schema.optional(PositiveInt),
 });
 export type ServerProviderModel = typeof ServerProviderModel.Type;
 

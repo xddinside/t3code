@@ -8,6 +8,7 @@ import {
   type ProviderKind,
   type ProjectEntry,
   type ProjectId,
+  type Skill,
   type ProviderApprovalDecision,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
@@ -35,6 +36,7 @@ import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { isElectron } from "../env";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { getWsRpcClient } from "../wsRpcClient";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -123,6 +125,7 @@ import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
   getProviderModelCapabilities,
+  getProviderModelContextLimit,
   getProviderModels,
   resolveSelectableProvider,
 } from "../providerModels";
@@ -209,6 +212,7 @@ const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
 const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
+const EMPTY_SKILLS: Skill[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
 
@@ -870,10 +874,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
       return threadIds;
     }, [activeLatestTurn?.sourceProposedPlan?.threadId, activeThread?.id]),
   );
-  const activeContextWindow = useMemo(
-    () => deriveLatestContextWindowSnapshot(activeThread?.activities ?? []),
-    [activeThread?.activities],
-  );
   useEffect(() => {
     setMountedTerminalThreadIds((currentThreadIds) => {
       const nextThreadIds = reconcileMountedTerminalThreadIds({
@@ -1015,6 +1015,43 @@ export default function ChatView({ threadId }: ChatViewProps) {
     settings,
   });
   const selectedProviderModels = getProviderModels(providerStatuses, selectedProvider);
+  const activeContextWindow = useMemo(() => {
+    const usage = deriveLatestContextWindowSnapshot(activeThread?.activities ?? []);
+    if (!usage || usage.maxTokens !== null) {
+      return usage;
+    }
+
+    const activeContextProvider = activeThread?.modelSelection.provider ?? activeThread?.session?.provider;
+    const activeContextModel = activeThread?.modelSelection.model;
+    if (!activeContextProvider || !activeContextModel) {
+      return usage;
+    }
+
+    const providerModels = getProviderModels(providerStatuses, activeContextProvider);
+    const contextLimitTokens = getProviderModelContextLimit(
+      providerModels,
+      activeContextModel,
+      activeContextProvider,
+    );
+    if (!contextLimitTokens || contextLimitTokens <= 0) {
+      return usage;
+    }
+
+    const usedPercentage = Math.min(100, (usage.usedTokens / contextLimitTokens) * 100);
+    return {
+      ...usage,
+      maxTokens: contextLimitTokens,
+      remainingTokens: Math.max(0, Math.round(contextLimitTokens - usage.usedTokens)),
+      usedPercentage,
+      remainingPercentage: Math.max(0, 100 - usedPercentage),
+    };
+  }, [
+    activeThread?.activities,
+    activeThread?.modelSelection.model,
+    activeThread?.modelSelection.provider,
+    activeThread?.session?.provider,
+    providerStatuses,
+  ]);
   const composerProviderState = useMemo(
     () =>
       getComposerProviderState({
@@ -1460,6 +1497,21 @@ export default function ChatView({ threadId }: ChatViewProps) {
       limit: 80,
     }),
   );
+  const skillsQuery = useQuery(
+    useMemo(
+      () => ({
+        queryKey: ["skills", gitCwd],
+        queryFn: () =>
+          getWsRpcClient().skills.list({
+            ...(gitCwd ? { cwd: gitCwd } : {}),
+            provider: selectedProvider,
+          }),
+        enabled: composerTriggerKind === "skill",
+      }),
+      [gitCwd, composerTriggerKind, selectedProvider],
+    ),
+  );
+  const skills = skillsQuery.data ?? EMPTY_SKILLS;
   const workspaceEntries = workspaceEntriesQuery.data?.entries ?? EMPTY_PROJECT_ENTRIES;
   const composerMenuItems = useMemo<ComposerCommandItem[]>(() => {
     if (!composerTrigger) return [];
@@ -1507,6 +1559,25 @@ export default function ChatView({ threadId }: ChatViewProps) {
       );
     }
 
+    if (composerTrigger.kind === "skill") {
+      return skills
+        .filter((skill) => {
+          const query = composerTrigger.query.trim().toLowerCase();
+          if (!query) return true;
+          return (
+            skill.name.toLowerCase().includes(query) ||
+            skill.description.toLowerCase().includes(query)
+          );
+        })
+        .map((skill) => ({
+          id: `skill:${skill.name}`,
+          type: "skill" as const,
+          skill,
+          label: skill.name,
+          description: skill.description,
+        }));
+    }
+
     return searchableModelOptions
       .filter(({ searchSlug, searchName, searchProvider }) => {
         const query = composerTrigger.query.trim().toLowerCase();
@@ -1523,7 +1594,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         label: name,
         description: `${providerLabel} · ${slug}`,
       }));
-  }, [composerTrigger, searchableModelOptions, workspaceEntries]);
+  }, [composerTrigger, searchableModelOptions, workspaceEntries, skills]);
   const composerMenuOpen = Boolean(composerTrigger);
   const activeComposerMenuItem = useMemo(
     () =>
@@ -3771,6 +3842,24 @@ export default function ChatView({ threadId }: ChatViewProps) {
         }
         return;
       }
+      if (item.type === "skill") {
+        const replacement = `$${item.skill.name} `;
+        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+          snapshot.value,
+          trigger.rangeEnd,
+          replacement,
+        );
+        const applied = applyPromptReplacement(
+          trigger.rangeStart,
+          replacementRangeEnd,
+          replacement,
+          { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+        );
+        if (applied) {
+          setComposerHighlightedItemId(null);
+        }
+        return;
+      }
       onProviderModelSelect(item.provider, item.model);
       const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
         expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
@@ -3808,10 +3897,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
     [composerHighlightedItemId, composerMenuItems],
   );
   const isComposerMenuLoading =
-    composerTriggerKind === "path" &&
-    ((pathTriggerQuery.length > 0 && composerPathQueryDebouncer.state.isPending) ||
-      workspaceEntriesQuery.isLoading ||
-      workspaceEntriesQuery.isFetching);
+    (composerTriggerKind === "path" &&
+      ((pathTriggerQuery.length > 0 && composerPathQueryDebouncer.state.isPending) ||
+        workspaceEntriesQuery.isLoading ||
+        workspaceEntriesQuery.isFetching)) ||
+    (composerTriggerKind === "skill" &&
+      (skillsQuery.isLoading || skillsQuery.isFetching));
 
   const onPromptChange = useCallback(
     (

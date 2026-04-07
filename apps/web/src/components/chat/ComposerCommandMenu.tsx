@@ -1,4 +1,4 @@
-import { type ProjectEntry, type ProviderKind } from "@t3tools/contracts";
+import { type ProjectEntry, type ProviderKind, type Skill } from "@t3tools/contracts";
 import { memo, useLayoutEffect, useRef } from "react";
 import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../composer-logic";
 import { BotIcon } from "lucide-react";
@@ -28,6 +28,13 @@ export type ComposerCommandItem =
       type: "model";
       provider: ProviderKind;
       model: string;
+      label: string;
+      description: string;
+    }
+  | {
+      id: string;
+      type: "skill";
+      skill: Skill;
       label: string;
       description: string;
     };
@@ -80,10 +87,14 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
         {props.items.length === 0 && (
           <p className="px-3 py-2 text-muted-foreground/70 text-xs">
             {props.isLoading
-              ? "Searching workspace files..."
+              ? props.triggerKind === "skill"
+                ? "Searching skills..."
+                : "Searching workspace files..."
               : props.triggerKind === "path"
                 ? "No matching files or folders."
-                : "No matching command."}
+                : props.triggerKind === "skill"
+                  ? "No matching skills."
+                  : "No matching command."}
           </p>
         )}
       </div>
@@ -131,10 +142,15 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           model
         </Badge>
       ) : null}
-      <span className="flex min-w-0 items-center gap-1.5 truncate">
-        <span className="truncate">{props.item.label}</span>
+      {props.item.type === "skill" ? (
+        <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+          skill
+        </Badge>
+      ) : null}
+      <span className="shrink-0 whitespace-nowrap">{props.item.label}</span>
+      <span className="min-w-0 flex-1 truncate text-muted-foreground/70 text-xs">
+        {props.item.description}
       </span>
-      <span className="truncate text-muted-foreground/70 text-xs">{props.item.description}</span>
     </CommandItem>
   );
 });

@@ -16,6 +16,7 @@ import {
   RuntimeRequestId,
   RuntimeTaskId,
   ThreadId,
+  type ThreadTokenUsageSnapshot,
   TurnId,
   type ProviderApprovalDecision,
   type ProviderRuntimeEvent,
@@ -128,6 +129,10 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 export function asContentString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
@@ -195,6 +200,40 @@ export function normalizeOpenCodeUserInputQuestions(input: {
   }
 
   return normalizedQuestions;
+}
+
+function normalizeOpenCodeTokenUsage(value: unknown): ThreadTokenUsageSnapshot | undefined {
+  const usage = asRecord(value);
+  if (!usage) {
+    return undefined;
+  }
+
+  const cache = asRecord(usage.cache);
+  const usedTokens = asNumber(usage.total);
+  if (usedTokens === undefined || usedTokens <= 0) {
+    return undefined;
+  }
+
+  const inputTokens = asNumber(usage.input);
+  const cachedInputTokens =
+    (asNumber(cache?.read) ?? 0) + (asNumber(cache?.write) ?? 0) || undefined;
+  const outputTokens = asNumber(usage.output);
+  const reasoningOutputTokens = asNumber(usage.reasoning);
+
+  return {
+    usedTokens,
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
+    ...(usedTokens !== undefined ? { lastUsedTokens: usedTokens } : {}),
+    ...(inputTokens !== undefined ? { lastInputTokens: inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { lastCachedInputTokens: cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { lastOutputTokens: outputTokens } : {}),
+    ...(reasoningOutputTokens !== undefined
+      ? { lastReasoningOutputTokens: reasoningOutputTokens }
+      : {}),
+  };
 }
 
 export function buildOpenCodeResolvedUserInputAnswers(input: {
@@ -674,6 +713,27 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
           }
 
           if (partType === "step-finish") {
+            const tokenUsage = normalizeOpenCodeTokenUsage(part.tokens);
+            if (tokenUsage) {
+              yield* emit({
+                type: "thread.token-usage.updated",
+                eventId: EventId.makeUnsafe(randomUUID()),
+                provider: PROVIDER,
+                threadId: input.threadId,
+                turnId: input.turnId,
+                itemId: RuntimeItemId.makeUnsafe(partId),
+                createdAt,
+                raw: {
+                  source: "opencode.server.event",
+                  messageType: "message.response",
+                  payload: part,
+                },
+                payload: {
+                  usage: tokenUsage,
+                },
+              });
+            }
+
             yield* emit({
               type: "task.completed",
               eventId: EventId.makeUnsafe(randomUUID()),
@@ -1550,6 +1610,25 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                       }),
                     );
                   } else if (partType === "step-finish") {
+                    const tokenUsage = normalizeOpenCodeTokenUsage(part.tokens);
+                    if (tokenUsage) {
+                      await Effect.runPromise(
+                        emit({
+                          type: "thread.token-usage.updated",
+                          eventId: EventId.makeUnsafe(randomUUID()),
+                          provider: PROVIDER,
+                          threadId,
+                          turnId: context.activeTurnId,
+                          itemId: RuntimeItemId.makeUnsafe(partId),
+                          createdAt,
+                          raw,
+                          payload: {
+                            usage: tokenUsage,
+                          },
+                        }),
+                      );
+                    }
+
                     await Effect.runPromise(
                       emit({
                         type: "task.completed",
