@@ -54,7 +54,7 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     title: "OpenCode",
     description: "Save additional OpenCode model slugs for the picker and `/model` command.",
     placeholder: "your-opencode-model-slug",
-    example: "minimax-m2.5-free",
+    example: "minimax-m2.7",
   },
 };
 

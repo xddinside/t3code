@@ -95,7 +95,10 @@ export interface WsRpcClient {
     readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
   };
   readonly skills: {
-    readonly list: (input?: { cwd?: string; provider?: "codex" | "claudeAgent" | "opencode" }) => Promise<Array<Skill>>;
+    readonly list: (input?: {
+      cwd?: string;
+      provider?: "codex" | "claudeAgent" | "opencode";
+    }) => Promise<Array<Skill>>;
   };
 }
 
@@ -209,14 +212,9 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     skills: {
       list: (input) =>
-        transport.request(
-          (client) =>
-            client[WS_METHODS.skillsList](input ?? {}) as unknown as Effect.Effect<
-              ReadonlyArray<Skill>,
-              Error,
-              never
-            >,
-        ).then((skills) => [...skills]),
+        transport
+          .requestRpcUnsafe<ReadonlyArray<Skill>>(WS_METHODS.skillsList, input ?? {})
+          .then((skills) => [...skills]),
     },
   };
 }

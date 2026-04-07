@@ -6,7 +6,7 @@ import { createWsRpcProtocolLayer } from "./protocol";
 
 export class WsRpcAtomClient extends AtomRpc.Service<WsRpcAtomClient>()("WsRpcAtomClient", {
   group: WsRpcGroup,
-  protocol: Layer.suspend(() => createWsRpcProtocolLayer()),
+  protocol: Layer.suspend(() => createWsRpcProtocolLayer()) as Layer.Layer<unknown, never, never>,
 }) {}
 
 let sharedRuntime: ManagedRuntime.ManagedRuntime<WsRpcAtomClient, never> | null = null;

@@ -78,9 +78,13 @@ export const MODEL_OPTIONS_BY_PROVIDER = {
     { slug: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
   ],
   opencode: [
+    { slug: "glm-5", name: "GLM-5" },
+    { slug: "kimi-k2.5", name: "Kimi K2.5" },
+    { slug: "mimo-v2-omni", name: "MiMo V2 Omni" },
+    { slug: "mimo-v2-pro", name: "MiMo V2 Pro" },
+    { slug: "minimax-m2.5", name: "MiniMax M2.5" },
+    { slug: "minimax-m2.7", name: "MiniMax M2.7" },
     { slug: "minimax-m2.5-free", name: "MiniMax M2.5 Free" },
-    { slug: "mimo-v2-pro-free", name: "MiMo V2 Pro Free" },
-    { slug: "qwen3.6-plus-free", name: "Qwen 3.6 Plus Free" },
   ],
 } as const satisfies Record<ProviderKind, readonly ModelOption[]>;
 
@@ -99,7 +103,7 @@ export type ModelCapabilities = typeof ModelCapabilities.Type;
 export const DEFAULT_MODEL_BY_PROVIDER: Record<ProviderKind, string> = {
   codex: "gpt-5.4",
   claudeAgent: "claude-sonnet-4-6",
-  opencode: "minimax-m2.5-free",
+  opencode: "minimax-m2.7",
 };
 
 export const DEFAULT_MODEL = DEFAULT_MODEL_BY_PROVIDER.codex;
@@ -107,7 +111,7 @@ export const DEFAULT_MODEL = DEFAULT_MODEL_BY_PROVIDER.codex;
 export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER: Record<ProviderKind, string> = {
   codex: "gpt-5.4-mini",
   claudeAgent: "claude-haiku-4-5",
-  opencode: "minimax-m2.5-free",
+  opencode: "minimax-m2.7",
 };
 
 export const MODEL_SLUG_ALIASES_BY_PROVIDER: Record<ProviderKind, Record<string, string>> = {
@@ -133,10 +137,19 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER: Record<ProviderKind, Record<string,
     "claude-haiku-4-5-20251001": "claude-haiku-4-5",
   },
   opencode: {
+    "glm 5": "glm-5",
+    "kimi k2.5": "kimi-k2.5",
+    "kimi-k2.5": "kimi-k2.5",
+    "mimo v2 omni": "mimo-v2-omni",
+    "mimo-v2-omni": "mimo-v2-omni",
+    "mimo v2 pro": "mimo-v2-pro",
+    "mimo-v2-pro": "mimo-v2-pro",
+    "minimax m2.5": "minimax-m2.5",
+    "minimax-m2.5": "minimax-m2.5",
+    "minimax m2.7": "minimax-m2.7",
+    "minimax-m2.7": "minimax-m2.7",
     "minimax m2.5 free": "minimax-m2.5-free",
-    "mimo v2 pro free": "mimo-v2-pro-free",
-    "qwen 3.6 plus free": "qwen3.6-plus-free",
-    "qwen-3.6-plus-free": "qwen3.6-plus-free",
+    "minimax-m2.5-free": "minimax-m2.5-free",
   },
 };
 

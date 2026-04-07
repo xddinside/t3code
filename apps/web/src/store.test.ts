@@ -226,7 +226,7 @@ describe("store read model sync", () => {
       makeReadModelThread({
         modelSelection: {
           provider: "opencode",
-          model: "minimax-m2.5-free",
+          model: "minimax-m2.7",
         },
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
@@ -245,7 +245,7 @@ describe("store read model sync", () => {
     expect(next.threads[0]?.session?.provider).toBe("opencode");
     expect(next.threads[0]?.modelSelection).toEqual({
       provider: "opencode",
-      model: "minimax-m2.5-free",
+      model: "minimax-m2.7",
     });
   });
 

@@ -844,7 +844,7 @@ describe("ProviderCommandReactor", () => {
         },
         modelSelection: {
           provider: "opencode",
-          model: "minimax-m2.5-free",
+          model: "minimax-m2.7",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
@@ -858,11 +858,11 @@ describe("ProviderCommandReactor", () => {
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
       threadId: ThreadId.makeUnsafe("thread-1"),
       provider: "opencode",
-      model: "minimax-m2.5-free",
+      model: "minimax-m2.7",
     });
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
       threadId: ThreadId.makeUnsafe("thread-1"),
-      model: "minimax-m2.5-free",
+      model: "minimax-m2.7",
     });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());

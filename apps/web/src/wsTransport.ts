@@ -38,8 +38,8 @@ export class WsTransport {
     );
   }
 
-  async request<TSuccess>(
-    execute: (client: WsRpcProtocolClient) => Effect.Effect<TSuccess, Error, never>,
+  async request<TSuccess, TError = Error, TRequirements = never>(
+    execute: (client: WsRpcProtocolClient) => Effect.Effect<TSuccess, TError, TRequirements>,
     _options?: RequestOptions,
   ): Promise<TSuccess> {
     if (this.disposed) {
@@ -47,7 +47,33 @@ export class WsTransport {
     }
 
     const client = await this.clientPromise;
-    return await this.runtime.runPromise(Effect.suspend(() => execute(client)));
+    return await this.runtime.runPromise(
+      Effect.suspend(() => execute(client) as Effect.Effect<TSuccess, TError, never>),
+    );
+  }
+
+  async requestUnsafe<TSuccess>(
+    execute: (client: WsRpcProtocolClient) => unknown,
+    _options?: RequestOptions,
+  ): Promise<TSuccess> {
+    if (this.disposed) {
+      throw new Error("Transport disposed");
+    }
+
+    const client = await this.clientPromise;
+    return await this.runtime.runPromise(
+      Effect.suspend(() => execute(client) as Effect.Effect<TSuccess, Error, never>),
+    );
+  }
+
+  async requestRpcUnsafe<TSuccess>(
+    method: keyof WsRpcProtocolClient,
+    input: unknown,
+  ): Promise<TSuccess> {
+    return await this.requestUnsafe<TSuccess>((client) => {
+      const rpcMethod = client[method] as unknown as (arg: unknown) => unknown;
+      return rpcMethod(input);
+    });
   }
 
   async requestStream<TValue>(

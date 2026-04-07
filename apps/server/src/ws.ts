@@ -562,11 +562,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           "rpc.aggregate": "workspace",
         }),
       [WS_METHODS.skillsList]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.skillsList,
-          skillsService.listSkills(input),
-          { "rpc.aggregate": "skills" },
-        ),
+        observeRpcEffect(WS_METHODS.skillsList, skillsService.listSkills(input), {
+          "rpc.aggregate": "skills",
+        }),
       [WS_METHODS.gitStatus]: (input) =>
         observeRpcEffect(WS_METHODS.gitStatus, gitManager.status(input), {
           "rpc.aggregate": "git",

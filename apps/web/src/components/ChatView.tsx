@@ -1021,7 +1021,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
       return usage;
     }
 
-    const activeContextProvider = activeThread?.modelSelection.provider ?? activeThread?.session?.provider;
+    const activeContextProvider =
+      activeThread?.modelSelection.provider ?? activeThread?.session?.provider;
     const activeContextModel = activeThread?.modelSelection.model;
     if (!activeContextProvider || !activeContextModel) {
       return usage;
@@ -3901,8 +3902,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       ((pathTriggerQuery.length > 0 && composerPathQueryDebouncer.state.isPending) ||
         workspaceEntriesQuery.isLoading ||
         workspaceEntriesQuery.isFetching)) ||
-    (composerTriggerKind === "skill" &&
-      (skillsQuery.isLoading || skillsQuery.isFetching));
+    (composerTriggerKind === "skill" && (skillsQuery.isLoading || skillsQuery.isFetching));
 
   const onPromptChange = useCallback(
     (

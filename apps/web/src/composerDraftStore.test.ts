@@ -155,8 +155,8 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
     checkedAt: "2026-03-13T12:00:00.000Z",
     models: [
       {
-        slug: "minimax-m2.5-free",
-        name: "MiniMax M2.5 Free",
+        slug: "minimax-m2.7",
+        name: "MiniMax M2.7",
         isCustom: false,
         capabilities: {
           reasoningEffortLevels: [],
@@ -269,7 +269,7 @@ describe("deriveEffectiveComposerModelState", () => {
       settings: DEFAULT_UNIFIED_SETTINGS,
     });
 
-    expect(result.selectedModel).toBe("minimax-m2.5-free");
+    expect(result.selectedModel).toBe("minimax-m2.7");
   });
 });
 

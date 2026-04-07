@@ -143,7 +143,9 @@ async function probeCodexSkills(input: {
         const result = asRecord(response.result);
         const groups = asArray(result?.data);
         const skills = groups.flatMap((group) =>
-          asArray(asRecord(group)?.skills).map(mapCodexSkill).filter((skill) => skill !== null),
+          asArray(asRecord(group)?.skills)
+            .map(mapCodexSkill)
+            .filter((skill) => skill !== null),
         );
         finish(() => resolve(skills));
       }
@@ -182,9 +184,9 @@ function readSkillMeta(skillDirectoryPath: string): Effect.Effect<Skill | null, 
     const fs = yield* FileSystem.FileSystem;
 
     const skillMetaPath = `${skillDirectoryPath}/SKILL.md`;
-    const skillMetaStat = yield* fs.stat(skillMetaPath).pipe(
-      Effect.catch(() => Effect.succeed(null)),
-    );
+    const skillMetaStat = yield* fs
+      .stat(skillMetaPath)
+      .pipe(Effect.catch(() => Effect.succeed(null)));
     if (skillMetaStat?.type !== "File") {
       return null;
     }

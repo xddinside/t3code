@@ -25,8 +25,8 @@ const PROVIDER = "opencode" as const;
 
 const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
-    slug: "minimax-m2.5-free",
-    name: "MiniMax M2.5 Free",
+    slug: "glm-5",
+    name: "GLM-5",
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
@@ -42,8 +42,42 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     } satisfies ModelCapabilities,
   },
   {
-    slug: "mimo-v2-pro-free",
-    name: "MiMo V2 Pro Free",
+    slug: "kimi-k2.5",
+    name: "Kimi K2.5",
+    isCustom: false,
+    contextLimitTokens: 262_144,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    } satisfies ModelCapabilities,
+  },
+  {
+    slug: "mimo-v2-omni",
+    name: "MiMo V2 Omni",
+    isCustom: false,
+    contextLimitTokens: 262_144,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    } satisfies ModelCapabilities,
+  },
+  {
+    slug: "mimo-v2-pro",
+    name: "MiMo V2 Pro",
     isCustom: false,
     contextLimitTokens: 1_048_576,
     capabilities: {
@@ -59,10 +93,44 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     } satisfies ModelCapabilities,
   },
   {
-    slug: "qwen3.6-plus-free",
-    name: "Qwen 3.6 Plus Free",
+    slug: "minimax-m2.5",
+    name: "MiniMax M2.5",
     isCustom: false,
-    contextLimitTokens: 1_048_576,
+    contextLimitTokens: 204_800,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    } satisfies ModelCapabilities,
+  },
+  {
+    slug: "minimax-m2.7",
+    name: "MiniMax M2.7",
+    isCustom: false,
+    contextLimitTokens: 204_800,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    } satisfies ModelCapabilities,
+  },
+  {
+    slug: "minimax-m2.5-free",
+    name: "MiniMax M2.5 Free",
+    isCustom: false,
+    contextLimitTokens: 204_800,
     capabilities: {
       reasoningEffortLevels: [
         { value: "low", label: "Low" },
