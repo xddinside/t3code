@@ -6,6 +6,7 @@ import {
   buildOpenCodeResolvedUserInputAnswers,
   listOpenCodePendingQuestionRequestIds,
   normalizeOpenCodeUserInputQuestions,
+  transitionOpenCodeAssistantTextItem,
 } from "./OpenCodeAdapter";
 
 describe("OpenCodeAdapter helpers", () => {
@@ -132,5 +133,35 @@ describe("OpenCodeAdapter helpers", () => {
   it("rejects empty content strings while keeping whitespace-only chunks", () => {
     expect(asContentString("")).toBeUndefined();
     expect(asContentString(" \n")).toBe(" \n");
+  });
+
+  it("rotates assistant text items when OpenCode starts a new text part", () => {
+    const state = {
+      assistantItemId: "part-1",
+      assistantItemStarted: true,
+      assistantItemCompleted: false,
+    };
+
+    expect(transitionOpenCodeAssistantTextItem(state, "part-2")).toBe("part-1");
+    expect(state).toEqual({
+      assistantItemId: "part-2",
+      assistantItemStarted: true,
+      assistantItemCompleted: false,
+    });
+  });
+
+  it("keeps the current assistant text item active when deltas continue for the same part", () => {
+    const state = {
+      assistantItemId: "part-1",
+      assistantItemStarted: true,
+      assistantItemCompleted: false,
+    };
+
+    expect(transitionOpenCodeAssistantTextItem(state, "part-1")).toBeUndefined();
+    expect(state).toEqual({
+      assistantItemId: "part-1",
+      assistantItemStarted: true,
+      assistantItemCompleted: false,
+    });
   });
 });

@@ -97,6 +97,11 @@ type OpenCodeContext = {
   readonly turns: Array<OpenCodeTurnState>;
 };
 
+type OpenCodeAssistantItemState = Pick<
+  OpenCodeTurnState,
+  "assistantItemId" | "assistantItemStarted" | "assistantItemCompleted"
+>;
+
 type PendingQuestionState = {
   readonly questionIds: ReadonlyArray<string>;
   readonly questions: ReadonlyArray<UserInputQuestion>;
@@ -131,6 +136,26 @@ function asString(value: unknown): string | undefined {
 
 function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export function transitionOpenCodeAssistantTextItem(
+  state: OpenCodeAssistantItemState | undefined,
+  nextItemId: string,
+): string | undefined {
+  if (!state) {
+    return undefined;
+  }
+
+  if (state.assistantItemStarted && state.assistantItemId === nextItemId) {
+    return undefined;
+  }
+
+  const previousItemId =
+    state.assistantItemId && !state.assistantItemCompleted ? state.assistantItemId : undefined;
+  state.assistantItemId = nextItemId;
+  state.assistantItemStarted = true;
+  state.assistantItemCompleted = false;
+  return previousItemId && previousItemId !== nextItemId ? previousItemId : undefined;
 }
 
 export function asContentString(value: unknown): string | undefined {
@@ -602,9 +627,31 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
               return;
             }
 
-            if (turnState) {
-              turnState.assistantItemId = assistantItemId;
-              turnState.assistantItemStarted = true;
+            const previousAssistantItemId = transitionOpenCodeAssistantTextItem(
+              turnState,
+              assistantItemId,
+            );
+
+            if (previousAssistantItemId) {
+              yield* emit({
+                type: "item.completed",
+                eventId: EventId.makeUnsafe(randomUUID()),
+                provider: PROVIDER,
+                threadId: input.threadId,
+                turnId: input.turnId,
+                itemId: RuntimeItemId.makeUnsafe(previousAssistantItemId),
+                createdAt,
+                raw: {
+                  source: "opencode.server.event",
+                  messageType: "message.response",
+                  payload: input.response,
+                },
+                payload: {
+                  itemType: "assistant_message",
+                  status: "completed",
+                  title: "Assistant message",
+                },
+              });
             }
 
             yield* emit({
@@ -1496,9 +1543,35 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
 
                   if (partType === "text") {
                     partKinds.set(partId, "text");
-                    if (currentTurn && !currentTurn.assistantItemStarted) {
-                      currentTurn.assistantItemId = partId;
-                      currentTurn.assistantItemStarted = true;
+                    const wasActiveAssistantItem =
+                      currentTurn?.assistantItemStarted && currentTurn.assistantItemId === partId;
+                    const previousAssistantItemId = transitionOpenCodeAssistantTextItem(
+                      currentTurn,
+                      partId,
+                    );
+                    if (previousAssistantItemId) {
+                      await Effect.runPromise(
+                        emit({
+                          type: "item.completed",
+                          eventId: EventId.makeUnsafe(randomUUID()),
+                          provider: PROVIDER,
+                          threadId,
+                          turnId: context.activeTurnId,
+                          itemId: RuntimeItemId.makeUnsafe(previousAssistantItemId),
+                          createdAt,
+                          raw,
+                          payload: {
+                            itemType: "assistant_message",
+                            status: "completed",
+                            title: "Assistant message",
+                          },
+                        }),
+                      );
+                    }
+                    if (wasActiveAssistantItem) {
+                      break;
+                    }
+                    if (currentTurn) {
                       await Effect.runPromise(
                         emit({
                           type: "item.started",
