@@ -40,7 +40,22 @@ import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
 const PROVIDER = "opencode" as const;
+const GO_PROVIDER = "opencode-go" as const;
 const DEFAULT_SERVER_HOST = "127.0.0.1";
+
+const GO_MODEL_SLUGS = new Set([
+  "glm-5",
+  "kimi-k2.5",
+  "mimo-v2-omni",
+  "mimo-v2-pro",
+  "minimax-m2.5",
+  "minimax-m2.7",
+]);
+
+function getProviderIdForModel(model: string | undefined): string | undefined {
+  if (!model) return undefined;
+  return GO_MODEL_SLUGS.has(model) ? GO_PROVIDER : PROVIDER;
+}
 
 type OpenCodeRuntimeMode = ProviderSession["runtimeMode"];
 
@@ -2027,7 +2042,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
 
           const requestPayload = {
             parts,
-            ...(model ? { model: { providerID: PROVIDER, modelID: model } } : {}),
+            ...(model ? { model: { providerID: getProviderIdForModel(model), modelID: model } } : {}),
             ...(variant ? { variant } : {}),
             agent: input.interactionMode === "plan" ? "plan" : "build",
           } satisfies Record<string, unknown>;
