@@ -3,12 +3,13 @@ import { PassThrough } from "node:stream";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ThreadId } from "@t3tools/contracts";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { OpenCodeAdapter } from "../Services/OpenCodeAdapter.ts";
+import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
 import { makeOpenCodeAdapterLive } from "./OpenCodeAdapter.ts";
 
 const { spawnMock } = vi.hoisted(() => ({
@@ -36,6 +37,101 @@ function createFakeChildProcess() {
 }
 
 describe("OpenCodeAdapter sendTurn", () => {
+  it("refreshes the OpenCode provider snapshot after a session starts successfully", async () => {
+    const originalFetch = globalThis.fetch;
+    const child = createFakeChildProcess();
+    spawnMock.mockImplementation(() => {
+      setTimeout(() => {
+        child.stdout.write("http://127.0.0.1:4096/\n");
+      }, 0);
+      return child as never;
+    });
+
+    const refresh = vi.fn(() => Effect.succeed([]));
+
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const rawUrl =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url = new URL(rawUrl);
+
+      if (url.pathname === "/event") {
+        return new Response(
+          new ReadableStream({
+            start() {},
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      }
+
+      if (url.pathname === "/session" && init?.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            id: "ses_test",
+            time: {
+              created: Date.now(),
+              updated: Date.now(),
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected fetch request: ${init?.method ?? "GET"} ${url.toString()}`);
+    }) as unknown as typeof fetch;
+
+    const layer = makeOpenCodeAdapterLive().pipe(
+      Layer.provideMerge(
+        Layer.succeed(ProviderRegistry, {
+          getProviders: Effect.succeed([]),
+          refresh,
+          streamChanges: Stream.empty,
+        }),
+      ),
+      Layer.provideMerge(
+        ServerConfig.layerTest(process.cwd(), { prefix: "opencode-adapter-test-refresh-" }),
+      ),
+      Layer.provideMerge(
+        ServerSettingsService.layerTest({
+          providers: {
+            opencode: {
+              enabled: true,
+              binaryPath: "opencode",
+            },
+          },
+        }),
+      ),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    try {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const adapter = yield* OpenCodeAdapter;
+
+            yield* adapter.startSession({
+              threadId: ThreadId.makeUnsafe("thread-opencode-provider-refresh"),
+              provider: "opencode",
+              runtimeMode: "full-access",
+              cwd: process.cwd(),
+            });
+          }).pipe(Effect.provide(layer)),
+        ),
+      );
+
+      expect(refresh).toHaveBeenCalledWith("opencode");
+    } finally {
+      globalThis.fetch = originalFetch;
+      spawnMock.mockReset();
+    }
+  });
+
   it("does not wait for the long-lived message response before returning", async () => {
     const originalFetch = globalThis.fetch;
     const child = createFakeChildProcess();

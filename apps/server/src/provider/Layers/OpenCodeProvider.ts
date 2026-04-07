@@ -83,6 +83,9 @@ const runOpenCodeCommand = (args: ReadonlyArray<string>) =>
     );
     const command = ChildProcess.make(openCodeSettings.binaryPath, [...args], {
       shell: process.platform === "win32",
+      env: {
+        ...process.env,
+      },
     });
 
     const child = yield* spawner.spawn(command);

@@ -144,7 +144,31 @@ const buildCmd = Command.make(
       const clientTarget = path.join(serverDir, "dist/client");
 
       if (yield* fs.exists(webDist)) {
-        yield* fs.copy(webDist, clientTarget);
+        const distDir = path.join(serverDir, "dist");
+        yield* fs.makeDirectory(distDir, { recursive: true });
+
+        const stagedClientParent = yield* fs.makeTempDirectory({
+          directory: distDir,
+          prefix: "client-stage-",
+        });
+        const stagedClientTarget = path.join(stagedClientParent, "client");
+
+        yield* Effect.acquireUseRelease(
+          Effect.succeed({ stagedClientParent, stagedClientTarget }),
+          ({ stagedClientTarget }) =>
+            Effect.gen(function* () {
+              yield* fs.copy(webDist, stagedClientTarget);
+              yield* fs
+                .remove(clientTarget, { recursive: true, force: true })
+                .pipe(Effect.ignore({ log: true }));
+              yield* fs.rename(stagedClientTarget, clientTarget);
+            }),
+          ({ stagedClientParent }) =>
+            fs
+              .remove(stagedClientParent, { recursive: true, force: true })
+              .pipe(Effect.ignore({ log: true })),
+        );
+
         yield* applyDevelopmentIconOverrides(repoRoot, serverDir);
         yield* Effect.log("[cli] Bundled web app into dist/client");
       } else {

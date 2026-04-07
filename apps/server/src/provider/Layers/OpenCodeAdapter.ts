@@ -22,7 +22,7 @@ import {
   type ProviderSession,
   type UserInputQuestion,
 } from "@t3tools/contracts";
-import { Cause, Effect, Exit, Layer, Queue, Stream } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
@@ -35,6 +35,7 @@ import {
   type ProviderAdapterError,
 } from "../Errors.ts";
 import { OpenCodeAdapter, type OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
+import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
 const PROVIDER = "opencode" as const;
@@ -73,6 +74,7 @@ type OpenCodeTurnState = {
   readonly id: TurnId;
   userMessageId?: string;
   assistantMessageId?: string;
+  previousAssistantMessageId?: string;
   assistantItemId?: string;
   assistantItemStarted?: boolean;
   assistantItemCompleted?: boolean;
@@ -132,6 +134,23 @@ export function asContentString(value: unknown): string | undefined {
 
 function asArray(value: unknown): ReadonlyArray<unknown> | undefined {
   return Array.isArray(value) ? value : undefined;
+}
+
+function findLatestAssistantMessage(messages: ReadonlyArray<OpenCodeMessageListEntry>) {
+  const latestEntry = messages.at(-1);
+  return latestEntry?.info.role === "assistant" ? latestEntry : undefined;
+}
+
+function buildResponseFromMessageListEntry(
+  entry: OpenCodeMessageListEntry,
+): OpenCodeSendMessageResponse {
+  return {
+    info: {
+      id: entry.info.id,
+      role: entry.info.role,
+    },
+    parts: entry.parts,
+  };
 }
 
 export function normalizeOpenCodeUserInputQuestions(input: {
@@ -442,6 +461,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
   const make = Effect.gen(function* () {
     const serverConfig = yield* ServerConfig;
     const serverSettings = yield* ServerSettingsService;
+    const providerRegistryOption = yield* Effect.serviceOption(ProviderRegistry);
     const nativeEventLogger =
       options?.nativeEventLogger ??
       (options?.nativeEventLogPath !== undefined
@@ -458,6 +478,13 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
     const serverPassword: string | undefined = undefined;
     let child: ChildProcess | undefined;
     const activeEventLoopDirectories = new Set<string>();
+
+    const refreshProviderStatusFromRuntimeSuccess = () =>
+      Option.match(providerRegistryOption, {
+        onNone: () => Effect.void,
+        onSome: (providerRegistry) =>
+          providerRegistry.refresh(PROVIDER).pipe(Effect.asVoid, Effect.ignoreCause({ log: true })),
+      });
 
     const emit = (event: ProviderRuntimeEvent) =>
       Effect.gen(function* () {
@@ -813,34 +840,85 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
         ),
       );
 
+    const finalizeSendTurnFromLatestMessage = (input: {
+      readonly threadId: ThreadId;
+      readonly turnId: TurnId;
+      readonly mode?: "fallback" | "completion-only";
+    }) =>
+      Effect.gen(function* () {
+        const context = contextsByThreadId.get(input.threadId);
+        if (!context) {
+          return;
+        }
+        const turnState = context.turns.find((entry) => entry.id === input.turnId);
+
+        const messages = yield* requestJson<ReadonlyArray<OpenCodeMessageListEntry>>({
+          method: "GET",
+          path: `/session/${context.sessionId}/message`,
+          cwd: context.cwd,
+        }).pipe(Effect.orElseSucceed(() => []));
+        const latestAssistantMessage = findLatestAssistantMessage(messages);
+        if (!latestAssistantMessage) {
+          return;
+        }
+        if (
+          !turnState?.assistantMessageId &&
+          latestAssistantMessage.info.id === turnState?.previousAssistantMessageId
+        ) {
+          return;
+        }
+
+        yield* emitAssistantResponseFromMessage({
+          threadId: input.threadId,
+          turnId: input.turnId,
+          response: buildResponseFromMessageListEntry(latestAssistantMessage),
+          ...(input.mode ? { mode: input.mode } : {}),
+        });
+      });
+
     const finalizeSendTurnResponse = (input: {
       readonly threadId: ThreadId;
       readonly turnId: TurnId;
-      readonly response: OpenCodeSendMessageResponse | undefined;
     }) =>
       Effect.gen(function* () {
         const context = contextsByThreadId.get(input.threadId);
         const turnState = context?.turns.find((entry) => entry.id === input.turnId);
 
-        yield* Effect.sleep("150 millis");
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          yield* Effect.sleep("150 millis");
 
-        if (!turnState?.sawStreamingActivity) {
-          yield* emitAssistantResponseFromMessage({
-            threadId: input.threadId,
-            turnId: input.turnId,
-            response: input.response,
-            mode: "fallback",
-          });
-          return;
-        }
+          if (!turnState?.sawStreamingActivity) {
+            yield* finalizeSendTurnFromLatestMessage({
+              threadId: input.threadId,
+              turnId: input.turnId,
+              mode: "fallback",
+            });
+            if (turnState?.assistantItemCompleted) {
+              return;
+            }
+          }
 
-        if (!turnState.assistantItemCompleted && context?.activeTurnId === input.turnId) {
-          yield* emitAssistantResponseFromMessage({
-            threadId: input.threadId,
-            turnId: input.turnId,
-            response: input.response,
-            mode: "completion-only",
-          });
+          if (
+            turnState?.sawStreamingActivity &&
+            !turnState.assistantItemCompleted &&
+            context?.activeTurnId === input.turnId
+          ) {
+            yield* finalizeSendTurnFromLatestMessage({
+              threadId: input.threadId,
+              turnId: input.turnId,
+              mode: "completion-only",
+            });
+            if (turnState.assistantItemCompleted) {
+              return;
+            }
+          }
+
+          if (
+            turnState?.assistantItemCompleted ||
+            (turnState?.sawStreamingActivity && context?.activeTurnId !== input.turnId)
+          ) {
+            return;
+          }
         }
       });
 
@@ -1687,6 +1765,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
 
           contextsByThreadId.set(input.threadId, context);
           threadIdBySessionId.set(sessionInfo.id, input.threadId);
+          yield* refreshProviderStatusFromRuntimeSuccess();
 
           return toProviderSession({
             threadId: input.threadId,
@@ -1751,7 +1830,14 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
           context.updatedAt = isoNow();
           context.model = model;
           context.variant = variant;
-          const turnState: OpenCodeTurnState = { id: turnId, items: [] };
+          const previousAssistantMessageId = context.turns
+            .toReversed()
+            .find((entry) => entry.assistantMessageId)?.assistantMessageId;
+          const turnState: OpenCodeTurnState = {
+            id: turnId,
+            items: [],
+            ...(previousAssistantMessageId ? { previousAssistantMessageId } : {}),
+          };
           context.turns.push(turnState);
 
           yield* emit({
@@ -1796,17 +1882,17 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
 
           yield* Effect.sync(() => {
             void Effect.runFork(
-              requestJson<OpenCodeSendMessageResponse>({
+              requestJson<unknown>({
+                responseMode: "status-only",
                 method: "POST",
                 path: `/session/${context.sessionId}/message`,
                 cwd: context.cwd,
                 body: requestPayload,
               }).pipe(
-                Effect.flatMap((response) =>
+                Effect.flatMap(() =>
                   finalizeSendTurnResponse({
                     threadId: input.threadId,
                     turnId,
-                    response,
                   }),
                 ),
                 Effect.catchCause((cause) =>
