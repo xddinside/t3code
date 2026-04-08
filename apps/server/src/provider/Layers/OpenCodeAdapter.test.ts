@@ -4,8 +4,10 @@ import {
   asContentString,
   buildOpenCodeOrderedUserInputAnswers,
   buildOpenCodeResolvedUserInputAnswers,
+  hasOpenCodeResponseParts,
   listOpenCodePendingQuestionRequestIds,
   normalizeOpenCodeUserInputQuestions,
+  resolveOpenCodeAssistantFinalizeMode,
   transitionOpenCodeAssistantTextItem,
 } from "./OpenCodeAdapter";
 
@@ -135,6 +137,11 @@ describe("OpenCodeAdapter helpers", () => {
     expect(asContentString(" \n")).toBe(" \n");
   });
 
+  it("does not finalize OpenCode responses from empty assistant snapshots", () => {
+    expect(hasOpenCodeResponseParts({ parts: [] })).toBe(false);
+    expect(hasOpenCodeResponseParts({ parts: [{ id: "part-1", type: "text" }] })).toBe(true);
+  });
+
   it("rotates assistant text items when OpenCode starts a new text part", () => {
     const state = {
       assistantItemId: "part-1",
@@ -163,5 +170,23 @@ describe("OpenCodeAdapter helpers", () => {
       assistantItemStarted: true,
       assistantItemCompleted: false,
     });
+  });
+
+  it("uses fallback finalization when streaming activity had no assistant text", () => {
+    expect(
+      resolveOpenCodeAssistantFinalizeMode({
+        sawStreamingActivity: true,
+        sawAssistantTextDelta: false,
+      }),
+    ).toBe("fallback");
+  });
+
+  it("uses completion-only finalization after assistant text deltas were streamed", () => {
+    expect(
+      resolveOpenCodeAssistantFinalizeMode({
+        sawStreamingActivity: true,
+        sawAssistantTextDelta: true,
+      }),
+    ).toBe("completion-only");
   });
 });

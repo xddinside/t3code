@@ -44,7 +44,7 @@ const GO_PROVIDER = "opencode-go" as const;
 const DEFAULT_SERVER_HOST = "127.0.0.1";
 
 const GO_MODEL_SLUGS = new Set([
-  "glm-5",
+  "glm-5.1",
   "kimi-k2.5",
   "mimo-v2-omni",
   "mimo-v2-pro",
@@ -175,6 +175,19 @@ export function transitionOpenCodeAssistantTextItem(
 
 export function asContentString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export function resolveOpenCodeAssistantFinalizeMode(input: {
+  sawStreamingActivity?: boolean | undefined;
+  sawAssistantTextDelta?: boolean | undefined;
+}): "fallback" | "completion-only" {
+  return input.sawStreamingActivity && input.sawAssistantTextDelta ? "completion-only" : "fallback";
+}
+
+export function hasOpenCodeResponseParts(
+  response: Pick<OpenCodeSendMessageResponse, "parts"> | undefined,
+): boolean {
+  return (response?.parts.length ?? 0) > 0;
 }
 
 function asArray(value: unknown): ReadonlyArray<unknown> | undefined {
@@ -397,6 +410,7 @@ function normalizeRequestType(
       return "command_execution_approval";
     case "edit":
       return "file_change_approval";
+    case "external_directory":
     case "read":
     case "glob":
     case "grep":
@@ -406,6 +420,21 @@ function normalizeRequestType(
     default:
       return "unknown";
   }
+}
+
+function extractPermissionDetail(props: Record<string, unknown>): string | undefined {
+  const permission = asString(props.permission);
+  if (permission === "external_directory") {
+    const metadata = asRecord(props.metadata);
+    return asString(metadata?.parentDir) ?? asString(metadata?.filepath);
+  }
+
+  const patterns = asArray(props.patterns)
+    ?.filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  return patterns && patterns.length > 0 ? patterns.join(", ") : undefined;
 }
 
 function normalizeApprovalDecision(
@@ -990,10 +1019,15 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
           return;
         }
 
+        const response = buildResponseFromMessageListEntry(latestAssistantMessage);
+        if (!hasOpenCodeResponseParts(response)) {
+          return;
+        }
+
         yield* emitAssistantResponseFromMessage({
           threadId: input.threadId,
           turnId: input.turnId,
-          response: buildResponseFromMessageListEntry(latestAssistantMessage),
+          response,
           ...(input.mode ? { mode: input.mode } : {}),
         });
       });
@@ -1028,7 +1062,10 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
             yield* finalizeSendTurnFromLatestMessage({
               threadId: input.threadId,
               turnId: input.turnId,
-              mode: "completion-only",
+              mode: resolveOpenCodeAssistantFinalizeMode({
+                sawStreamingActivity: turnState.sawStreamingActivity,
+                sawAssistantTextDelta: turnState.sawAssistantTextDelta,
+              }),
             });
             if (turnState.assistantItemCompleted) {
               return;
@@ -1334,8 +1371,8 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                       raw,
                       payload: {
                         requestType: normalizeRequestType(asString(props.permission)),
-                        ...(asArray(props.patterns)?.length
-                          ? { detail: asArray(props.patterns)?.join(", ") }
+                        ...(extractPermissionDetail(props)
+                          ? { detail: extractPermissionDetail(props) }
                           : {}),
                       },
                     }),
@@ -1487,6 +1524,9 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
 
                   const currentTurn = context.turns.at(-1);
                   if (role === "user") {
+                    if (currentTurn) {
+                      currentTurn.userMessageId = messageId;
+                    }
                     currentTurn?.items.push(props);
                     break;
                   }
@@ -1547,6 +1587,7 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                   const part = asRecord(props.part);
                   const partId = asString(part?.id);
                   const partType = asString(part?.type) ?? "unknown";
+                  const partMessageId = asString(part?.messageID);
                   if (!part || !partId) {
                     break;
                   }
@@ -1557,6 +1598,9 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                   }
 
                   if (partType === "text") {
+                    if (partMessageId && currentTurn?.userMessageId === partMessageId) {
+                      break;
+                    }
                     partKinds.set(partId, "text");
                     const wasActiveAssistantItem =
                       currentTurn?.assistantItemStarted && currentTurn.assistantItemId === partId;
@@ -2042,7 +2086,9 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
 
           const requestPayload = {
             parts,
-            ...(model ? { model: { providerID: getProviderIdForModel(model), modelID: model } } : {}),
+            ...(model
+              ? { model: { providerID: getProviderIdForModel(model), modelID: model } }
+              : {}),
             ...(variant ? { variant } : {}),
             agent: input.interactionMode === "plan" ? "plan" : "build",
           } satisfies Record<string, unknown>;
