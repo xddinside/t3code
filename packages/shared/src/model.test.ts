@@ -51,7 +51,7 @@ describe("normalizeModelSlug", () => {
   it("maps known aliases to canonical slugs", () => {
     expect(normalizeModelSlug("5.3")).toBe("gpt-5.3-codex");
     expect(normalizeModelSlug("sonnet", "claudeAgent")).toBe("claude-sonnet-4-6");
-    expect(normalizeModelSlug("glm 5", "opencode")).toBe("glm-5");
+    expect(normalizeModelSlug("glm 5.1", "opencode")).toBe("glm-5.1");
     expect(normalizeModelSlug("mimo-v2-omni", "opencode")).toBe("mimo-v2-omni");
   });
 
@@ -106,7 +106,7 @@ describe("inferProviderForModel", () => {
     expect(inferProviderForModel("gpt-5.3-codex")).toBe("codex");
     expect(inferProviderForModel("claude-sonnet-4-6")).toBe("claudeAgent");
     expect(inferProviderForModel("sonnet")).toBe("claudeAgent");
-    expect(inferProviderForModel("glm-5")).toBe("opencode");
+    expect(inferProviderForModel("glm-5.1")).toBe("opencode");
     expect(inferProviderForModel("minimax-m2.7")).toBe("opencode");
   });
 });

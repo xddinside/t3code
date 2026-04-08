@@ -78,7 +78,7 @@ export const MODEL_OPTIONS_BY_PROVIDER = {
     { slug: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
   ],
   opencode: [
-    { slug: "glm-5", name: "GLM-5" },
+    { slug: "glm-5.1", name: "GLM-5.1" },
     { slug: "kimi-k2.5", name: "Kimi K2.5" },
     { slug: "mimo-v2-omni", name: "MiMo V2 Omni" },
     { slug: "mimo-v2-pro", name: "MiMo V2 Pro" },
@@ -137,7 +137,7 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER: Record<ProviderKind, Record<string,
     "claude-haiku-4-5-20251001": "claude-haiku-4-5",
   },
   opencode: {
-    "glm 5": "glm-5",
+    "glm 5.1": "glm-5.1",
     "kimi k2.5": "kimi-k2.5",
     "kimi-k2.5": "kimi-k2.5",
     "mimo v2 omni": "mimo-v2-omni",

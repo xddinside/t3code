@@ -25,8 +25,8 @@ const PROVIDER = "opencode" as const;
 
 const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
-    slug: "glm-5",
-    name: "GLM-5",
+    slug: "glm-5.1",
+    name: "GLM-5.1",
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
