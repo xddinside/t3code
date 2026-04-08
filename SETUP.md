@@ -70,10 +70,12 @@ The t3remote script automates starting the T3 Code server for remote access. It 
 
 ### Installation
 
-Add the following to your shell config (`~/.zshrc` or `~/.bashrc`):
+Add one of the following to your shell config (`~/.zshrc` or `~/.bashrc`):
+
+### Zsh Installation
 
 ```bash
-# t3remote function - paste this entire block
+# t3remote function for Zsh - paste this entire block
 t3remote() {
     local TAILNET_IP TAILNET_DNS REMOTE_HOST TOKEN TOKEN_FILE TOKEN_DIR PORT REMOTE_HOME STATE_PROFILE DESKTOP_LOG REPO_ROOT REMOTE_URL DESKTOP_PID_FILE DESKTOP_PID REMOTE_PID REMOTE_PGID
     PORT="${1:-3773}"
@@ -272,6 +274,211 @@ _t3remote_terminate_pid() {
     fi
 
     printf '%s\n' "${pgid:-$pid}"
+}
+```
+
+### Bash Installation
+
+For Bash users, add this to your `~/.bashrc` instead:
+
+```bash
+# t3remote function for Bash - paste this entire block
+_t3remote_find_desktop_pid() {
+    local repo_root="$1"
+    local pid_file="${2:-$HOME/.config/t3remote/dev-desktop.pid}"
+    local pid pid_args pid_cwd candidate
+
+    if [[ -s "$pid_file" ]]; then
+        pid="$(cat "$pid_file")"
+        if kill -0 "$pid" 2>/dev/null; then
+            pid_args="$(ps -p "$pid" -o args= 2>/dev/null)"
+            pid_cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null)"
+            if [[ "$pid_cwd" == "$repo_root" ]] && [[ "$pid_args" =~ 'bun run dev:desktop|node scripts/dev-runner.ts dev:desktop' ]]; then
+                printf '%s\n' "$pid"
+                return 0
+            fi
+        fi
+        rm -f "$pid_file"
+    fi
+
+    while IFS= read -r candidate; do
+        [[ -z "$candidate" ]] && continue
+        pid_cwd="$(readlink "/proc/$candidate/cwd" 2>/dev/null)"
+        if [[ "$pid_cwd" != "$repo_root" ]]; then
+            continue
+        fi
+        pid_args="$(ps -p "$candidate" -o args= 2>/dev/null)"
+        if [[ "$pid_args" =~ 'bun run dev:desktop|node scripts/dev-runner.ts dev:desktop' ]]; then
+            printf '%s\n' "$candidate" >"$pid_file"
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done < <(pgrep -f 'bun run dev:desktop|node scripts/dev-runner.ts dev:desktop' 2>/dev/null)
+
+    return 1
+}
+
+_t3remote_find_remote_pid() {
+    local repo_root="$1"
+    local port="$2"
+    local candidate pid_args pid_cwd
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        candidate="$(echo "$line" | awk '{print $1}')"
+        [[ -z "$candidate" ]] && continue
+        pid_cwd="$(readlink "/proc/$candidate/cwd" 2>/dev/null)"
+        if [[ "$pid_cwd" != "$repo_root/apps/server" ]]; then
+            continue
+        fi
+        pid_args="$(ps -p "$candidate" -o args= 2>/dev/null)"
+        if [[ "$pid_args" =~ 'node dist/bin.mjs|bun run src/bin.ts|bun .*apps/server.* start --|bun .*apps/server.* dev --' ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done < <(ss -lntp 2>/dev/null | awk -v p=":$port" '$4 ~ p && match($0, /pid=[0-9]+/) {print substr($0, RSTART + 4, RLENGTH - 4)}' | sort -u)
+
+    return 1
+}
+
+_t3remote_terminate_pid() {
+    local pid="$1"
+    local pgid attempt
+
+    if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+        return 0
+    fi
+
+    pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')"
+    if [[ -n "$pgid" ]]; then
+        kill -TERM -- "-$pgid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+    else
+        kill -TERM "$pid" 2>/dev/null
+    fi
+
+    for attempt in 1 2 3 4 5; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    if kill -0 "$pid" 2>/dev/null; then
+        if [[ -n "$pgid" ]]; then
+            kill -KILL -- "-$pgid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
+        else
+            kill -KILL "$pid" 2>/dev/null
+        fi
+    fi
+
+    printf '%s\n' "${pgid:-$pid}"
+}
+
+t3remote() {
+    local TAILNET_IP TAILNET_DNS REMOTE_HOST TOKEN TOKEN_FILE TOKEN_DIR PORT REMOTE_HOME STATE_PROFILE DESKTOP_LOG REPO_ROOT REMOTE_URL DESKTOP_PID_FILE DESKTOP_PID REMOTE_PID REMOTE_PGID
+    PORT="${1:-3773}"
+    TAILNET_IP="$(tailscale ip -4 | head -n1)" || return 1
+    TAILNET_DNS="$(tailscale status --json 2>/dev/null | jq -r '.Self.DNSName // empty' | sed 's/\.$//')" || return 1
+    TOKEN_DIR="${T3REMOTE_CONFIG_DIR:-$HOME/.config/t3remote}"
+    TOKEN_FILE="${T3REMOTE_TOKEN_FILE:-$TOKEN_DIR/auth-token}"
+    if [[ -n "${T3CODE_AUTH_TOKEN:-}" ]]; then
+        TOKEN="$T3CODE_AUTH_TOKEN"
+    else
+        mkdir -p "$TOKEN_DIR" || return 1
+        if [[ -s "$TOKEN_FILE" ]]; then
+            TOKEN="$(cat "$TOKEN_FILE")"
+        else
+            umask 077
+            TOKEN="$(openssl rand -hex 24)" || return 1
+            printf '%s\n' "$TOKEN" >"$TOKEN_FILE" || return 1
+        fi
+    fi
+    REMOTE_HOME="${T3REMOTE_HOME:-$HOME/.t3-remote-opencode}"
+    STATE_PROFILE="${T3REMOTE_STATE_PROFILE:-dev}"
+    DESKTOP_LOG="${T3REMOTE_DESKTOP_LOG:-/tmp/t3remote-dev-desktop.log}"
+    REPO_ROOT="${T3REMOTE_REPO_ROOT:-$HOME/dev/work/t3code}"
+    REMOTE_HOST="${T3REMOTE_HOST:-${TAILNET_DNS:-$TAILNET_IP}}"
+    REMOTE_URL="http://$REMOTE_HOST:$PORT/?token=$TOKEN"
+    DESKTOP_PID_FILE="${T3REMOTE_DESKTOP_PID_FILE:-$TOKEN_DIR/dev-desktop.pid}"
+
+    mkdir -p "$(dirname "$DESKTOP_LOG")" || return 1
+
+    DESKTOP_PID="$(_t3remote_find_desktop_pid "$REPO_ROOT" "$DESKTOP_PID_FILE" 2>/dev/null)" || DESKTOP_PID=""
+    REMOTE_PID="$(_t3remote_find_remote_pid "$REPO_ROOT" "$PORT" 2>/dev/null)" || REMOTE_PID=""
+
+    if [[ -z "$DESKTOP_PID" ]]; then
+        echo "Starting local dev desktop app in background..."
+        (
+            cd "$REPO_ROOT" || exit 1
+            exec env T3CODE_HOME="$REMOTE_HOME" T3CODE_STATE_PROFILE="$STATE_PROFILE" T3CODE_DESKTOP_WS_URL="ws://$TAILNET_IP:$PORT/?token=$TOKEN" bun run dev:desktop
+        ) >"$DESKTOP_LOG" 2>&1 &
+        printf '%s\n' "$!" >"$DESKTOP_PID_FILE"
+        echo "Desktop log: $DESKTOP_LOG"
+    else
+        echo "Local dev desktop app already running for this repo (pid $DESKTOP_PID)."
+    fi
+
+    if [[ -n "$REMOTE_PID" ]]; then
+        REMOTE_PGID="$(ps -o pgid= -p "$REMOTE_PID" 2>/dev/null | tr -d ' ')"
+        echo "Stopping stale t3remote server on port $PORT..."
+        REMOTE_PGID="$(_t3remote_terminate_pid "$REMOTE_PID" 2>/dev/null)" || REMOTE_PGID="${REMOTE_PGID:-$REMOTE_PID}"
+    fi
+
+    echo ""
+    echo "T3 Code remote starting..."
+    echo "Tailnet IP: $TAILNET_IP"
+    if [[ -n "$TAILNET_DNS" ]]; then
+        echo "Tailnet DNS: $TAILNET_DNS"
+    fi
+    echo "Port: $PORT"
+    echo "Token: $TOKEN"
+    echo "T3 Home: $REMOTE_HOME"
+    echo "State Profile: $STATE_PROFILE"
+    echo "Open on phone: $REMOTE_URL"
+    echo "Bookmark this URL on your phone to reconnect faster."
+    if command -v qrencode >/dev/null 2>&1; then
+        echo ""
+        echo "Scan QR:"
+        qrencode -t ansiutf8 "$REMOTE_URL"
+    fi
+    echo ""
+
+    (
+        cd "$REPO_ROOT" || exit 1
+        bun run build &&
+        T3CODE_HOME="$REMOTE_HOME" T3CODE_STATE_PROFILE="$STATE_PROFILE" T3CODE_AUTH_TOKEN="$TOKEN" T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD=false bun run --cwd apps/server dev -- \
+            --host "$TAILNET_IP" \
+            --port "$PORT" \
+            --auth-token "$TOKEN" \
+            --no-browser
+    )
+}
+
+t3remote-stop() {
+    local repo_root="${T3REMOTE_REPO_ROOT:-$HOME/dev/work/t3code}"
+    local pid_file="${T3REMOTE_DESKTOP_PID_FILE:-${T3REMOTE_CONFIG_DIR:-$HOME/.config/t3remote}/dev-desktop.pid}"
+    local port="${1:-3773}"
+    local desktop_pid desktop_pgid remote_pid remote_pgid stopped_any=0
+
+    desktop_pid="$(_t3remote_find_desktop_pid "$repo_root" "$pid_file" 2>/dev/null)" || desktop_pid=""
+    if [[ -n "$desktop_pid" ]]; then
+        desktop_pgid="$(_t3remote_terminate_pid "$desktop_pid" 2>/dev/null)" || desktop_pgid="$desktop_pid"
+        stopped_any=1
+        echo "Stopped t3remote desktop process group (${desktop_pgid:-$desktop_pid})."
+    fi
+
+    rm -f "$pid_file"
+
+    remote_pid="$(_t3remote_find_remote_pid "$repo_root" "$port" 2>/dev/null)" || remote_pid=""
+    if [[ -n "$remote_pid" ]]; then
+        remote_pgid="$(_t3remote_terminate_pid "$remote_pid" 2>/dev/null)" || remote_pgid="$remote_pid"
+        stopped_any=1
+        echo "Stopped t3remote remote server process group (${remote_pgid:-$remote_pid}) on port $port."
+    fi
+
+    if [[ "$stopped_any" -eq 0 ]]; then
+        echo "No tracked t3remote desktop or remote server process is running."
+    fi
 }
 ```
 
