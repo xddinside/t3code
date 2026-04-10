@@ -10,7 +10,6 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { Separator } from "~/components/ui/separator";
 import {
   Sheet,
-  SheetDescription,
   SheetHeader,
   SheetPopup,
   SheetTitle,
@@ -244,7 +243,7 @@ function Sidebar({
         <Sheet onOpenChange={setOpenMobile} open={openMobile} {...props}>
           <SheetPopup
             className={cn(
-              "w-(--sidebar-width) max-w-none bg-sidebar p-0 text-sidebar-foreground",
+              "w-(--sidebar-width) max-w-[calc(100%-var(--spacing(12)))] bg-sidebar p-0 text-sidebar-foreground",
               className,
             )}
             data-mobile="true"
@@ -258,9 +257,16 @@ function Sidebar({
               } as React.CSSProperties
             }
           >
-            <SheetHeader className="sr-only">
-              <SheetTitle>Sidebar</SheetTitle>
-              <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+            <SheetHeader className="flex flex-row items-center justify-between px-3 py-2.5 border-b border-sidebar-border">
+              <SheetTitle className="text-sm font-semibold">Threads</SheetTitle>
+              <button
+                type="button"
+                aria-label="Close sidebar"
+                className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                onClick={() => setOpenMobile(false)}
+              >
+                <PanelLeftCloseIcon className="size-4" />
+              </button>
             </SheetHeader>
             <div className="flex h-full w-full flex-col">{children}</div>
           </SheetPopup>

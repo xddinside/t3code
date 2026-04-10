@@ -1,0 +1,16 @@
+/home/xdd/dev/work/t3code/.docs/workspace-layout.md:3,1,4,Monorepo is split into server web desktop and shared packages with explicit roles
+/home/xdd/dev/work/t3code/.docs/architecture.md:3,1,4,Server wraps codex app-server via websocket and serves the React web UI
+/home/xdd/dev/work/t3code/package.json:5,5,6,Root package config defines apps/* and packages/* as workspaces for monorepo scripts
+/home/xdd/dev/work/t3code/apps/server/src/main.ts:13,1,3,Server bootstrap builds runtime layers and exposes the main entrypoint
+/home/xdd/dev/work/t3code/apps/server/src/wsServer.ts:4,1,4,HTTP and websocket orchestration routing is centralized in the server module
+/home/xdd/dev/work/t3code/apps/server/src/wsServer.ts:80,1,5,Server consumes orchestration provider projection and terminal/git services
+/home/xdd/dev/work/t3code/apps/web/src/main.tsx:1,1,5,Web client entry mounts router and renders React app with env-specific history
+/home/xdd/dev/work/t3code/apps/web/src/router.ts:10,1,4,Router wraps TanStack router with query and app-wide store providers
+/home/xdd/dev/work/t3code/apps/web/src/nativeApi.ts:3,1,3,Client API abstraction chooses native bridge or websocket transport at runtime
+/home/xdd/dev/work/t3code/apps/desktop/src/main.ts:36,1,4,Desktop process boots a local Electron shell and spawns the backend server process
+/home/xdd/dev/work/t3code/apps/desktop/src/preload.ts:15,1,8,Bridge exposes filesystem and update APIs from Electron into the web runtime
+/home/xdd/dev/work/t3code/packages/contracts/src/index.ts:1,1,12,Shared protocol contracts re-export ws model provider and project schemas for all packages
+/home/xdd/dev/work/t3code/packages/contracts/src/ws.ts:37,1,6,WebSocket request methods and push channels define the runtime RPC boundary
+/home/xdd/dev/work/t3code/packages/contracts/src/orchestration.ts:18,1,6,Orchestration events and commands define the canonical domain state model
+/home/xdd/dev/work/t3code/packages/shared/package.json:6,1,8,Shared package provides explicit runtime utility exports used by server and web
+/home/xdd/dev/work/t3code/packages/shared/src/model.ts:17,1,8,Shared model helpers normalize provider model slugs and effort defaults

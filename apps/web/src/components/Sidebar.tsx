@@ -106,6 +106,7 @@ import {
   SidebarMenuSubItem,
   SidebarSeparator,
   SidebarTrigger,
+  useSidebar,
 } from "./ui/sidebar";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
@@ -417,7 +418,7 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
               onClick={(event) => event.stopPropagation()}
             />
           ) : (
-            <span className="min-w-0 flex-1 truncate text-xs">{thread.title}</span>
+            <span className="min-w-0 flex-1 truncate text-xs sm:text-sm">{thread.title}</span>
           )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -523,10 +524,10 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
                 </span>
               ) : (
                 <span
-                  className={`text-[10px] ${
+                  className={`text-[10px] sm:text-xs ${
                     isHighlighted
                       ? "text-foreground/72 dark:text-foreground/82"
-                      : "text-muted-foreground/40"
+                      : "text-muted-foreground/60"
                   }`}
                 >
                   {formatRelativeTimeLabel(thread.updatedAt ?? thread.createdAt)}
@@ -699,6 +700,7 @@ export default function Sidebar() {
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
   const keybindings = useServerKeybindings();
+  const { isMobile, setOpenMobile } = useSidebar();
   const [addingProject, setAddingProject] = useState(false);
   const [newCwd, setNewCwd] = useState("");
   const [isPickingFolder, setIsPickingFolder] = useState(false);
@@ -1203,6 +1205,9 @@ export default function Sidebar() {
         clearSelection();
       }
       setSelectionAnchor(threadId);
+      if (isMobile) {
+        setOpenMobile(false);
+      }
       void navigate({
         to: "/$threadId",
         params: { threadId },
@@ -1210,9 +1215,11 @@ export default function Sidebar() {
     },
     [
       clearSelection,
+      isMobile,
       navigate,
       rangeSelectTo,
       selectedThreadIds.size,
+      setOpenMobile,
       setSelectionAnchor,
       toggleThreadSelection,
     ],
@@ -1224,12 +1231,15 @@ export default function Sidebar() {
         clearSelection();
       }
       setSelectionAnchor(threadId);
+      if (isMobile) {
+        setOpenMobile(false);
+      }
       void navigate({
         to: "/$threadId",
         params: { threadId },
       });
     },
-    [clearSelection, navigate, selectedThreadIds.size, setSelectionAnchor],
+    [clearSelection, isMobile, navigate, selectedThreadIds.size, setOpenMobile, setSelectionAnchor],
   );
 
   const handleProjectContextMenu = useCallback(
@@ -1657,6 +1667,9 @@ export default function Sidebar() {
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    if (isMobile) {
+                      setOpenMobile(false);
+                    }
                     const seedContext = resolveSidebarNewThreadSeedContext({
                       projectId: project.id,
                       defaultEnvMode: resolveSidebarNewThreadEnvMode({
