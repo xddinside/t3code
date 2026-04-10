@@ -3,13 +3,17 @@ import { useNavigate } from "@tanstack/react-router";
 
 import ThreadSidebar from "./Sidebar";
 import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 
 const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
-const THREAD_SIDEBAR_MIN_WIDTH = 13 * 16;
-const THREAD_MAIN_CONTENT_MIN_WIDTH = 40 * 16;
+const THREAD_SIDEBAR_MIN_WIDTH_DESKTOP = 13 * 16;
+const THREAD_MAIN_CONTENT_MIN_WIDTH_DESKTOP = 40 * 16;
+const THREAD_SIDEBAR_MIN_WIDTH_MOBILE = 10 * 16;
+const THREAD_MAIN_CONTENT_MIN_WIDTH_MOBILE = 20 * 16;
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const isMobile = useMediaQuery("max-sm");
 
   useEffect(() => {
     const onMenuAction = window.desktopBridge?.onMenuAction;
@@ -28,15 +32,18 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   }, [navigate]);
 
   return (
-    <SidebarProvider defaultOpen>
+    <SidebarProvider defaultOpen={!isMobile}>
       <Sidebar
         side="left"
         collapsible="offcanvas"
         className="border-r border-border bg-card text-foreground"
         resizable={{
-          minWidth: THREAD_SIDEBAR_MIN_WIDTH,
+          minWidth: isMobile ? THREAD_SIDEBAR_MIN_WIDTH_MOBILE : THREAD_SIDEBAR_MIN_WIDTH_DESKTOP,
           shouldAcceptWidth: ({ nextWidth, wrapper }) =>
-            wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
+            wrapper.clientWidth - nextWidth >=
+            (isMobile
+              ? THREAD_MAIN_CONTENT_MIN_WIDTH_MOBILE
+              : THREAD_MAIN_CONTENT_MIN_WIDTH_DESKTOP),
           storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
         }}
       >

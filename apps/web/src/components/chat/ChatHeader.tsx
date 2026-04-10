@@ -63,8 +63,8 @@ export const ChatHeader = memo(function ChatHeader({
 }: ChatHeaderProps) {
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
-        <SidebarTrigger className="size-7 shrink-0 md:hidden" />
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 overflow-hidden sm:gap-3">
+        <SidebarTrigger className="size-9 shrink-0 md:hidden sm:size-7" />
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
           title={activeThreadTitle}
@@ -82,7 +82,7 @@ export const ChatHeader = memo(function ChatHeader({
           </Badge>
         )}
       </div>
-      <div className="flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2 @3xl/header-actions:gap-3">
         {activeProjectScripts && (
           <ProjectScriptsControl
             scripts={activeProjectScripts}
@@ -111,10 +111,10 @@ export const ChatHeader = memo(function ChatHeader({
                 onPressedChange={onToggleTerminal}
                 aria-label="Toggle terminal drawer"
                 variant="outline"
-                size="xs"
+                size="sm"
                 disabled={!terminalAvailable}
               >
-                <TerminalSquareIcon className="size-3" />
+                <TerminalSquareIcon className="size-3.5 sm:size-3" />
               </Toggle>
             }
           />
@@ -135,10 +135,10 @@ export const ChatHeader = memo(function ChatHeader({
                 onPressedChange={onToggleDiff}
                 aria-label="Toggle diff panel"
                 variant="outline"
-                size="xs"
+                size="sm"
                 disabled={!isGitRepo}
               >
-                <DiffIcon className="size-3" />
+                <DiffIcon className="size-3.5 sm:size-3" />
               </Toggle>
             }
           />
