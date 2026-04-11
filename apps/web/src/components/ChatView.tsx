@@ -4048,7 +4048,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       <header
         className={cn(
           "border-b border-border px-3 sm:px-5 safe-area-top",
-          isElectron ? "drag-region flex h-[52px] items-center" : "py-2 sm:py-3",
+          isElectron ? "drag-region flex h-[52px] items-center" : "py-2.5 sm:py-3",
         )}
       >
         <ChatHeader

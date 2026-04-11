@@ -8,7 +8,7 @@ export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORT_OPTIONS)[numbe
 export const CLAUDE_CODE_EFFORT_OPTIONS = ["low", "medium", "high", "max", "ultrathink"] as const;
 export type ClaudeCodeEffort = (typeof CLAUDE_CODE_EFFORT_OPTIONS)[number];
 
-export const OPENCODE_REASONING_EFFORT_OPTIONS = ["low", "medium", "high"] as const;
+export const OPENCODE_REASONING_EFFORT_OPTIONS = ["default", "low", "medium", "high"] as const;
 export type OpenCodeReasoningEffort = (typeof OPENCODE_REASONING_EFFORT_OPTIONS)[number];
 
 export type ProviderReasoningEffort =
@@ -162,7 +162,7 @@ export const REASONING_EFFORT_OPTIONS_BY_PROVIDER = {
 export const DEFAULT_REASONING_EFFORT_BY_PROVIDER = {
   codex: "high",
   claudeAgent: "high",
-  opencode: "high",
+  opencode: "default",
 } as const satisfies Record<ProviderKind, ProviderReasoningEffort>;
 
 export const PROVIDER_DISPLAY_NAMES: Record<ProviderKind, string> = {

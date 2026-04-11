@@ -51,6 +51,20 @@ type ProviderRegistryEntry = {
   }) => ReactNode;
 };
 
+function hasTraitsControls(
+  provider: ProviderKind,
+  models: ReadonlyArray<ServerProviderModel>,
+  model: string,
+): boolean {
+  const caps = getProviderModelCapabilities(models, model, provider);
+  return (
+    caps.reasoningEffortLevels.length > 0 ||
+    caps.supportsThinkingToggle ||
+    caps.supportsFastMode ||
+    caps.contextWindowOptions.length > 1
+  );
+}
+
 function getProviderStateFromCapabilities(
   input: ComposerProviderStateInput,
 ): ComposerProviderState {
@@ -212,6 +226,9 @@ export function renderProviderTraitsMenuContent(input: {
   prompt: string;
   onPromptChange: (prompt: string) => void;
 }): ReactNode {
+  if (!hasTraitsControls(input.provider, input.models, input.model)) {
+    return null;
+  }
   return composerProviderRegistry[input.provider].renderTraitsMenuContent({
     threadId: input.threadId,
     model: input.model,
@@ -231,6 +248,9 @@ export function renderProviderTraitsPicker(input: {
   prompt: string;
   onPromptChange: (prompt: string) => void;
 }): ReactNode {
+  if (!hasTraitsControls(input.provider, input.models, input.model)) {
+    return null;
+  }
   return composerProviderRegistry[input.provider].renderTraitsPicker({
     threadId: input.threadId,
     model: input.model,

@@ -64,11 +64,11 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleDiff,
 }: ChatHeaderProps) {
   return (
-    <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden sm:gap-3">
-        <SidebarTrigger className="size-9 shrink-0 md:hidden sm:size-7" />
+    <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2.5 sm:gap-2">
+      <div className="flex min-h-10 min-w-0 flex-1 items-center gap-2 overflow-hidden sm:min-h-0 sm:gap-3">
+        <SidebarTrigger className="size-10 shrink-0 md:hidden sm:size-7" />
         <h2
-          className="min-w-0 shrink truncate text-[15px] font-semibold leading-tight text-foreground sm:text-sm sm:font-medium"
+          className="min-w-0 shrink truncate text-base font-semibold leading-none text-foreground sm:text-sm sm:font-medium sm:leading-tight"
           title={activeThreadTitle}
         >
           {activeThreadTitle}
@@ -160,7 +160,7 @@ export const ChatHeader = memo(function ChatHeader({
       </div>
 
       {/* Mobile: single overflow menu */}
-      <div className="flex sm:hidden shrink-0 items-center">
+      <div className="flex min-h-10 shrink-0 items-center sm:hidden">
         <Menu>
           <MenuTrigger
             render={

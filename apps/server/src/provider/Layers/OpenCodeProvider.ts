@@ -23,6 +23,26 @@ import { ServerSettingsError, ServerSettingsService } from "../../serverSettings
 
 const PROVIDER = "opencode" as const;
 
+// OpenCode docs describe variants generically, but do not provide a reliable
+// per-model capability feed we can consume here. Keep this list explicit and
+// only advertise selectable reasoning levels for models we have verified.
+const OPENCODE_REASONING_EFFORT_LEVELS_BY_MODEL: Partial<
+  Record<string, ModelCapabilities["reasoningEffortLevels"]>
+> = {
+  "mimo-v2-omni": [
+    { value: "default", label: "Default", isDefault: true },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+  ],
+  "mimo-v2-pro": [
+    { value: "default", label: "Default", isDefault: true },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+  ],
+};
+
 const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
     slug: "glm-5.1",
@@ -30,11 +50,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-      ],
+      reasoningEffortLevels: OPENCODE_REASONING_EFFORT_LEVELS_BY_MODEL["glm-5.1"] ?? [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],
@@ -47,11 +63,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 262_144,
     capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-      ],
+      reasoningEffortLevels: OPENCODE_REASONING_EFFORT_LEVELS_BY_MODEL["kimi-k2.5"] ?? [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],
@@ -64,11 +76,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 262_144,
     capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-      ],
+      reasoningEffortLevels: OPENCODE_REASONING_EFFORT_LEVELS_BY_MODEL["mimo-v2-omni"] ?? [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],
@@ -81,11 +89,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 1_048_576,
     capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-      ],
+      reasoningEffortLevels: OPENCODE_REASONING_EFFORT_LEVELS_BY_MODEL["mimo-v2-pro"] ?? [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],
@@ -98,7 +102,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
-      reasoningEffortLevels: [],
+      reasoningEffortLevels: OPENCODE_REASONING_EFFORT_LEVELS_BY_MODEL["minimax-m2.5"] ?? [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],
@@ -111,7 +115,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
-      reasoningEffortLevels: [],
+      reasoningEffortLevels: OPENCODE_REASONING_EFFORT_LEVELS_BY_MODEL["minimax-m2.7"] ?? [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],
@@ -124,7 +128,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
-      reasoningEffortLevels: [],
+      reasoningEffortLevels: OPENCODE_REASONING_EFFORT_LEVELS_BY_MODEL["minimax-m2.5-free"] ?? [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],

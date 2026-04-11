@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ServerProviderModel } from "@t3tools/contracts";
-import { getComposerProviderState } from "./composerProviderRegistry";
+import {
+  getComposerProviderState,
+  renderProviderTraitsMenuContent,
+  renderProviderTraitsPicker,
+} from "./composerProviderRegistry";
 
 const CODEX_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
@@ -120,14 +124,15 @@ const OPENCODE_MODELS: ReadonlyArray<ServerProviderModel> = [
     },
   },
   {
-    slug: "glm-5.1",
-    name: "GLM-5.1",
+    slug: "mimo-v2-pro",
+    name: "MiMo V2 Pro",
     isCustom: false,
     capabilities: {
       reasoningEffortLevels: [
+        { value: "default", label: "Default", isDefault: true },
         { value: "low", label: "Low" },
         { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
+        { value: "high", label: "High" },
       ],
       supportsFastMode: false,
       supportsThinkingToggle: false,
@@ -467,7 +472,7 @@ describe("getComposerProviderState", () => {
   it("normalizes OpenCode variant dispatch options", () => {
     const state = getComposerProviderState({
       provider: "opencode",
-      model: "glm-5.1",
+      model: "mimo-v2-pro",
       models: OPENCODE_MODELS,
       prompt: "",
       modelOptions: {
@@ -481,6 +486,22 @@ describe("getComposerProviderState", () => {
       provider: "opencode",
       promptEffort: "medium",
       modelOptionsForDispatch: { variant: "medium" },
+    });
+  });
+
+  it("uses Default as the effective OpenCode effort when no variant is selected", () => {
+    const state = getComposerProviderState({
+      provider: "opencode",
+      model: "mimo-v2-pro",
+      models: OPENCODE_MODELS,
+      prompt: "",
+      modelOptions: undefined,
+    });
+
+    expect(state).toEqual({
+      provider: "opencode",
+      promptEffort: "default",
+      modelOptionsForDispatch: undefined,
     });
   });
 
@@ -522,5 +543,31 @@ describe("getComposerProviderState", () => {
       promptEffort: null,
       modelOptionsForDispatch: undefined,
     });
+  });
+
+  it("does not render traits UI for fixed-thinking OpenCode models", () => {
+    expect(
+      renderProviderTraitsPicker({
+        provider: "opencode",
+        threadId: "thread-id" as never,
+        model: "minimax-m2.5-free",
+        models: OPENCODE_MODELS,
+        modelOptions: undefined,
+        prompt: "",
+        onPromptChange: () => {},
+      }),
+    ).toBeNull();
+
+    expect(
+      renderProviderTraitsMenuContent({
+        provider: "opencode",
+        threadId: "thread-id" as never,
+        model: "minimax-m2.5-free",
+        models: OPENCODE_MODELS,
+        modelOptions: undefined,
+        prompt: "",
+        onPromptChange: () => {},
+      }),
+    ).toBeNull();
   });
 });

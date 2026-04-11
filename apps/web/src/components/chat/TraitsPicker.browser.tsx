@@ -136,14 +136,15 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
         },
       },
       {
-        slug: "glm-5.1",
-        name: "GLM-5.1",
+        slug: "mimo-v2-pro",
+        name: "MiMo V2 Pro",
         isCustom: false,
         capabilities: {
           reasoningEffortLevels: [
+            { value: "default", label: "Default", isDefault: true },
             { value: "low", label: "Low" },
             { value: "medium", label: "Medium" },
-            { value: "high", label: "High", isDefault: true },
+            { value: "high", label: "High" },
           ],
           supportsFastMode: false,
           supportsThinkingToggle: false,
@@ -541,7 +542,7 @@ async function mountOpenCodePicker(
   } = {},
 ) {
   const threadId = ThreadId.makeUnsafe("thread-opencode-traits");
-  const model = props.model ?? "glm-5.1";
+  const model = props.model ?? "mimo-v2-pro";
   const draftsByThreadId: Record<ThreadId, ComposerThreadDraftState> = {
     [threadId]: {
       prompt: "",

@@ -194,6 +194,11 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
     ultrathinkInBodyText,
   } = getSelectedTraits(provider, models, model, prompt, modelOptions, allowPromptInjectedEffort);
   const defaultEffort = getDefaultEffort(caps);
+  const hasTraitsControls =
+    effort !== null ||
+    thinkingEnabled !== null ||
+    caps.supportsFastMode ||
+    contextWindowOptions.length > 1;
 
   const handleEffortChange = useCallback(
     (value: string) => {
@@ -232,7 +237,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
     ],
   );
 
-  if (effort === null && thinkingEnabled === null && contextWindowOptions.length <= 1) {
+  if (!hasTraitsControls) {
     return null;
   }
 
@@ -375,6 +380,15 @@ export const TraitsPicker = memo(function TraitsPicker({
   ]
     .filter(Boolean)
     .join(" · ");
+  const hasTraitsControls =
+    effort !== null ||
+    thinkingEnabled !== null ||
+    caps.supportsFastMode ||
+    contextWindowOptions.length > 1;
+
+  if (!hasTraitsControls) {
+    return null;
+  }
 
   const isCodexStyle = provider === "codex";
 
