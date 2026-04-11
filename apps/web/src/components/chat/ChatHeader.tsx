@@ -5,14 +5,16 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { memo } from "react";
-import GitActionsControl from "../GitActionsControl";
-import { DiffIcon, TerminalSquareIcon } from "lucide-react";
+import { DiffIcon, MoreHorizontalIcon, TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
-import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
+import GitActionsControl from "../GitActionsControl";
 
 interface ChatHeaderProps {
   activeThreadId: ThreadId;
@@ -63,26 +65,31 @@ export const ChatHeader = memo(function ChatHeader({
 }: ChatHeaderProps) {
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 overflow-hidden sm:gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden sm:gap-3">
         <SidebarTrigger className="size-9 shrink-0 md:hidden sm:size-7" />
         <h2
-          className="min-w-0 shrink truncate text-sm font-medium text-foreground"
+          className="min-w-0 shrink truncate text-[15px] font-semibold leading-tight text-foreground sm:text-sm sm:font-medium"
           title={activeThreadTitle}
         >
           {activeThreadTitle}
         </h2>
         {activeProjectName && (
-          <Badge variant="outline" className="min-w-0 shrink overflow-hidden">
+          <Badge variant="outline" className="hidden text-[10px] sm:inline-flex sm:text-xs">
             <span className="min-w-0 truncate">{activeProjectName}</span>
           </Badge>
         )}
         {activeProjectName && !isGitRepo && (
-          <Badge variant="outline" className="shrink-0 text-[10px] text-amber-700">
+          <Badge
+            variant="outline"
+            className="hidden text-[10px] text-amber-700 sm:inline-flex sm:text-xs"
+          >
             No Git
           </Badge>
         )}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2 @3xl/header-actions:gap-3">
+
+      {/* Desktop: all buttons inline */}
+      <div className="hidden sm:flex shrink-0 items-center gap-1.5 sm:gap-2 @3xl/header-actions:gap-3">
         {activeProjectScripts && (
           <ProjectScriptsControl
             scripts={activeProjectScripts}
@@ -114,7 +121,7 @@ export const ChatHeader = memo(function ChatHeader({
                 size="sm"
                 disabled={!terminalAvailable}
               >
-                <TerminalSquareIcon className="size-3.5 sm:size-3" />
+                <TerminalSquareIcon className="size-3" />
               </Toggle>
             }
           />
@@ -138,7 +145,7 @@ export const ChatHeader = memo(function ChatHeader({
                 size="sm"
                 disabled={!isGitRepo}
               >
-                <DiffIcon className="size-3.5 sm:size-3" />
+                <DiffIcon className="size-3" />
               </Toggle>
             }
           />
@@ -150,6 +157,49 @@ export const ChatHeader = memo(function ChatHeader({
                 : "Toggle diff panel"}
           </TooltipPopup>
         </Tooltip>
+      </div>
+
+      {/* Mobile: single overflow menu */}
+      <div className="flex sm:hidden shrink-0 items-center">
+        <Menu>
+          <MenuTrigger
+            render={
+              <Button variant="ghost" size="icon-sm" aria-label="More actions">
+                <MoreHorizontalIcon className="size-4" />
+              </Button>
+            }
+          />
+          <MenuPopup align="end" className="min-w-44">
+            <MenuItem onClick={onToggleTerminal} disabled={!terminalAvailable}>
+              <span className="flex items-center gap-2">
+                <TerminalSquareIcon className="size-4" />
+                {terminalOpen ? "Hide terminal" : "Show terminal"}
+              </span>
+            </MenuItem>
+            <MenuItem onClick={onToggleDiff} disabled={!isGitRepo}>
+              <span className="flex items-center gap-2">
+                <DiffIcon className="size-4" />
+                {diffOpen ? "Hide diff" : "Show diff"}
+              </span>
+            </MenuItem>
+            {activeProjectName && (
+              <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} compact />
+            )}
+            {activeProjectScripts && activeProjectScripts.length > 0 && (
+              <>
+                <div className="border-t border-border/50" />
+                <div className="px-2 py-1.5">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Scripts</p>
+                  {activeProjectScripts.map((script) => (
+                    <MenuItem key={script.id} onClick={() => onRunProjectScript(script)}>
+                      {script.name}
+                    </MenuItem>
+                  ))}
+                </div>
+              </>
+            )}
+          </MenuPopup>
+        </Menu>
       </div>
     </div>
   );

@@ -112,6 +112,18 @@ const OPENCODE_MODELS: ReadonlyArray<ServerProviderModel> = [
     name: "MiniMax M2.5 Free",
     isCustom: false,
     capabilities: {
+      reasoningEffortLevels: [],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    },
+  },
+  {
+    slug: "glm-5.1",
+    name: "GLM-5.1",
+    isCustom: false,
+    capabilities: {
       reasoningEffortLevels: [
         { value: "low", label: "Low" },
         { value: "medium", label: "Medium" },
@@ -447,12 +459,52 @@ describe("getComposerProviderState", () => {
 
     expect(state).toEqual({
       provider: "opencode",
-      promptEffort: "high",
+      promptEffort: null,
       modelOptionsForDispatch: undefined,
     });
   });
 
   it("normalizes OpenCode variant dispatch options", () => {
+    const state = getComposerProviderState({
+      provider: "opencode",
+      model: "glm-5.1",
+      models: OPENCODE_MODELS,
+      prompt: "",
+      modelOptions: {
+        opencode: {
+          variant: "medium",
+        },
+      },
+    });
+
+    expect(state).toEqual({
+      provider: "opencode",
+      promptEffort: "medium",
+      modelOptionsForDispatch: { variant: "medium" },
+    });
+  });
+
+  it("drops OpenCode variants not supported by the selected model", () => {
+    const state = getComposerProviderState({
+      provider: "opencode",
+      model: "minimax-m2.5-free",
+      models: OPENCODE_MODELS,
+      prompt: "",
+      modelOptions: {
+        opencode: {
+          variant: "max",
+        },
+      },
+    });
+
+    expect(state).toEqual({
+      provider: "opencode",
+      promptEffort: null,
+      modelOptionsForDispatch: undefined,
+    });
+  });
+
+  it("drops stale OpenCode variants for fixed-thinking models", () => {
     const state = getComposerProviderState({
       provider: "opencode",
       model: "minimax-m2.5-free",
@@ -467,8 +519,8 @@ describe("getComposerProviderState", () => {
 
     expect(state).toEqual({
       provider: "opencode",
-      promptEffort: "medium",
-      modelOptionsForDispatch: { variant: "medium" },
+      promptEffort: null,
+      modelOptionsForDispatch: undefined,
     });
   });
 });

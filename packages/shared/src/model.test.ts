@@ -11,6 +11,7 @@ import {
   isClaudeUltrathinkPrompt,
   normalizeClaudeModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
+  normalizeOpenCodeModelOptions,
   normalizeModelSlug,
   resolveApiModelId,
   resolveContextWindow,
@@ -293,5 +294,9 @@ describe("normalize*ModelOptionsWithCapabilities", () => {
     ).toEqual({
       thinking: true,
     });
+  });
+
+  it("drops OpenCode variants when the selected model exposes no variants", () => {
+    expect(normalizeOpenCodeModelOptions({ variant: "medium" }, [])).toBeUndefined();
   });
 });

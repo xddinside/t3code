@@ -1,7 +1,9 @@
+import type { GitStatusResult } from "@t3tools/contracts";
 import { ThreadId } from "@t3tools/contracts";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
+import { Menu, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 
 const THREAD_A = ThreadId.makeUnsafe("thread-a");
 const THREAD_B = ThreadId.makeUnsafe("thread-b");
@@ -11,6 +13,7 @@ const BRANCH_NAME = "feature/toast-scope";
 const {
   invalidateGitQueriesSpy,
   invalidateGitStatusQuerySpy,
+  gitStatusState,
   runStackedActionMutateAsyncSpy,
   setThreadBranchSpy,
   toastAddSpy,
@@ -26,7 +29,64 @@ const {
   toastCloseSpy: vi.fn(),
   toastPromiseSpy: vi.fn(),
   toastUpdateSpy: vi.fn(),
+  gitStatusState: (() => {
+    const defaultStatus: GitStatusResult = {
+      isRepo: true,
+      hasOriginRemote: true,
+      hasUpstream: true,
+      branch: "feature/toast-scope",
+      isDefaultBranch: false,
+      aheadCount: 1,
+      behindCount: 0,
+      hasWorkingTreeChanges: false,
+      workingTree: { files: [], insertions: 0, deletions: 0 },
+      pr: null,
+    };
+    let currentStatus: GitStatusResult = {
+      ...defaultStatus,
+      workingTree: { ...defaultStatus.workingTree, files: [...defaultStatus.workingTree.files] },
+    };
+    return {
+      get: () => ({
+        ...currentStatus,
+        workingTree: {
+          ...currentStatus.workingTree,
+          files: [...currentStatus.workingTree.files],
+        },
+      }),
+      set: (next: GitStatusResult) => {
+        currentStatus = {
+          ...next,
+          workingTree: {
+            ...next.workingTree,
+            files: [...next.workingTree.files],
+          },
+        };
+      },
+      reset: () => {
+        currentStatus = {
+          ...defaultStatus,
+          workingTree: {
+            ...defaultStatus.workingTree,
+            files: [...defaultStatus.workingTree.files],
+          },
+        };
+      },
+    };
+  })(),
 }));
+
+function setMockGitStatus(status: GitStatusResult) {
+  gitStatusState.set(status);
+}
+
+function resetMockGitStatus() {
+  gitStatusState.reset();
+}
+
+function getMockGitStatus() {
+  return gitStatusState.get();
+}
 
 vi.mock("@tanstack/react-query", async () => {
   const actual =
@@ -58,30 +118,24 @@ vi.mock("@tanstack/react-query", async () => {
     }),
     useQuery: vi.fn((options: { queryKey?: string[] }) => {
       if (options.queryKey?.[0] === "git-status") {
+        const status = getMockGitStatus();
         return {
-          data: {
-            branch: BRANCH_NAME,
-            hasWorkingTreeChanges: false,
-            workingTree: { files: [], insertions: 0, deletions: 0 },
-            hasUpstream: true,
-            aheadCount: 1,
-            behindCount: 0,
-            pr: null,
-          },
+          data: status,
           error: null,
         };
       }
 
       if (options.queryKey?.[0] === "git-branches") {
+        const status = getMockGitStatus();
         return {
           data: {
             isRepo: true,
             hasOriginRemote: true,
             branches: [
               {
-                name: BRANCH_NAME,
+                name: status.branch ?? BRANCH_NAME,
                 current: true,
-                isDefault: false,
+                isDefault: status.isDefaultBranch,
                 worktreePath: null,
               },
             ],
@@ -160,6 +214,12 @@ function findButtonByText(text: string): HTMLButtonElement | null {
   ) ?? null) as HTMLButtonElement | null;
 }
 
+function findMenuItemByText(text: string): HTMLElement | null {
+  return (Array.from(document.querySelectorAll('[data-slot="menu-item"]')).find((item) =>
+    item.textContent?.includes(text),
+  ) ?? null) as HTMLElement | null;
+}
+
 function Harness() {
   const [activeThreadId, setActiveThreadId] = useState(THREAD_A);
 
@@ -173,10 +233,22 @@ function Harness() {
   );
 }
 
+function CompactMenuHarness() {
+  return (
+    <Menu>
+      <MenuTrigger render={<button type="button">More actions</button>} />
+      <MenuPopup align="end">
+        <GitActionsControl gitCwd={GIT_CWD} activeThreadId={THREAD_A} compact />
+      </MenuPopup>
+    </Menu>
+  );
+}
+
 describe("GitActionsControl thread-scoped progress toast", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    resetMockGitStatus();
     document.body.innerHTML = "";
   });
 
@@ -230,6 +302,47 @@ describe("GitActionsControl thread-scoped progress toast", () => {
           type: "loading",
         }),
       );
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
+  it("keeps compact quick actions mounted when default-branch confirmation is required", async () => {
+    setMockGitStatus({
+      isRepo: true,
+      hasOriginRemote: true,
+      hasUpstream: true,
+      branch: "main",
+      isDefaultBranch: true,
+      aheadCount: 0,
+      behindCount: 0,
+      hasWorkingTreeChanges: true,
+      workingTree: { files: [], insertions: 4, deletions: 1 },
+      pr: null,
+    });
+
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(<CompactMenuHarness />, { container: host });
+
+    try {
+      const menuTrigger = findButtonByText("More actions");
+      expect(menuTrigger, 'Unable to find button containing "More actions"').toBeTruthy();
+      if (!(menuTrigger instanceof HTMLButtonElement)) {
+        throw new Error('Unable to find button containing "More actions"');
+      }
+      menuTrigger.click();
+
+      const quickActionItem = findMenuItemByText("Commit & push");
+      expect(quickActionItem, 'Unable to find menu item containing "Commit & push"').toBeTruthy();
+      if (!(quickActionItem instanceof HTMLElement)) {
+        throw new Error('Unable to find menu item containing "Commit & push"');
+      }
+      quickActionItem.click();
+
+      expect(document.body.textContent).toContain("Commit & push to default branch?");
+      expect(runStackedActionMutateAsyncSpy).not.toHaveBeenCalled();
     } finally {
       await screen.unmount();
       host.remove();

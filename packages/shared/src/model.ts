@@ -472,6 +472,10 @@ export function normalizeOpenCodeModelOptions(
     return undefined;
   }
 
+  if (allowedVariants && allowedVariants.length === 0) {
+    return undefined;
+  }
+
   if (
     allowedVariants &&
     allowedVariants.length > 0 &&

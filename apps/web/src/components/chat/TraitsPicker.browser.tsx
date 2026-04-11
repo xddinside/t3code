@@ -6,6 +6,7 @@ import {
   CodexModelOptions,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_SERVER_SETTINGS,
+  type OpenCodeModelOptions,
   ProjectId,
   type ServerProvider,
   ThreadId,
@@ -107,6 +108,45 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
           reasoningEffortLevels: [],
           supportsFastMode: false,
           supportsThinkingToggle: true,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+    ],
+  },
+  {
+    provider: "opencode",
+    enabled: true,
+    installed: true,
+    version: "0.1.0",
+    status: "ready",
+    auth: { status: "unknown" },
+    checkedAt: "2026-01-01T00:00:00.000Z",
+    models: [
+      {
+        slug: "minimax-m2.5-free",
+        name: "MiniMax M2.5 Free",
+        isCustom: false,
+        capabilities: {
+          reasoningEffortLevels: [],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+      {
+        slug: "glm-5.1",
+        name: "GLM-5.1",
+        isCustom: false,
+        capabilities: {
+          reasoningEffortLevels: [
+            { value: "low", label: "Low" },
+            { value: "medium", label: "Medium" },
+            { value: "high", label: "High", isDefault: true },
+          ],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
           contextWindowOptions: [],
           promptInjectedEffortLevels: [],
         },
@@ -488,6 +528,119 @@ describe("TraitsPicker (Codex)", () => {
     expect(useComposerDraftStore.getState().stickyModelSelectionByProvider.codex).toMatchObject({
       provider: "codex",
       options: { fastMode: true },
+    });
+  });
+});
+
+// ── OpenCode TraitsPicker tests ───────────────────────────────────────
+
+async function mountOpenCodePicker(
+  props: {
+    model?: string;
+    options?: OpenCodeModelOptions;
+  } = {},
+) {
+  const threadId = ThreadId.makeUnsafe("thread-opencode-traits");
+  const model = props.model ?? "glm-5.1";
+  const draftsByThreadId: Record<ThreadId, ComposerThreadDraftState> = {
+    [threadId]: {
+      prompt: "",
+      images: [],
+      nonPersistedImageIds: [],
+      persistedAttachments: [],
+      terminalContexts: [],
+      modelSelectionByProvider: {
+        opencode: {
+          provider: "opencode",
+          model,
+          ...(props.options ? { options: props.options } : {}),
+        },
+      },
+      activeProvider: "opencode",
+      runtimeMode: null,
+      interactionMode: null,
+    },
+  };
+
+  useComposerDraftStore.setState({
+    draftsByThreadId,
+    draftThreadsByThreadId: {},
+    projectDraftThreadIdByProjectId: {
+      [ProjectId.makeUnsafe("project-opencode-traits")]: threadId,
+    },
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  const screen = await render(
+    <TraitsPicker
+      provider="opencode"
+      models={TEST_PROVIDERS[2]!.models}
+      threadId={threadId}
+      model={model}
+      prompt=""
+      modelOptions={props.options}
+      onPromptChange={() => {}}
+    />,
+    { container: host },
+  );
+
+  const cleanup = async () => {
+    await screen.unmount();
+    host.remove();
+  };
+
+  return {
+    [Symbol.asyncDispose]: cleanup,
+    cleanup,
+  };
+}
+
+describe("TraitsPicker (OpenCode)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    localStorage.removeItem(COMPOSER_DRAFT_STORAGE_KEY);
+    useComposerDraftStore.setState({
+      draftsByThreadId: {},
+      draftThreadsByThreadId: {},
+      projectDraftThreadIdByProjectId: {},
+      stickyModelSelectionByProvider: {},
+    });
+  });
+
+  it("shows the effort trigger and options for effort-capable models", async () => {
+    await using _ = await mountOpenCodePicker();
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent ?? "").toContain("High");
+    });
+    await page.getByRole("button").click();
+
+    await vi.waitFor(() => {
+      const text = document.body.textContent ?? "";
+      expect(text).toContain("Effort");
+      expect(text).toContain("Low");
+      expect(text).toContain("Medium");
+      expect(text).toContain("High");
+    });
+  });
+
+  it("persists sticky OpenCode model options when traits change", async () => {
+    await using _ = await mountOpenCodePicker();
+
+    await page.getByRole("button").click();
+    await page.getByRole("menuitemradio", { name: "Medium" }).click();
+
+    expect(useComposerDraftStore.getState().stickyModelSelectionByProvider.opencode).toMatchObject({
+      provider: "opencode",
+      options: { variant: "medium" },
+    });
+  });
+
+  it("does not render a trigger for fixed-thinking OpenCode models", async () => {
+    await using _ = await mountOpenCodePicker({ model: "minimax-m2.5-free" });
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("button")).toBeNull();
     });
   });
 });

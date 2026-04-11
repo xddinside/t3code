@@ -98,11 +98,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-      ],
+      reasoningEffortLevels: [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],
@@ -115,11 +111,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-      ],
+      reasoningEffortLevels: [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],
@@ -132,11 +124,7 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     isCustom: false,
     contextLimitTokens: 204_800,
     capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-      ],
+      reasoningEffortLevels: [],
       supportsFastMode: false,
       supportsThinkingToggle: false,
       contextWindowOptions: [],

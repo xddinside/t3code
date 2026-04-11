@@ -1,10 +1,4 @@
-import {
-  getDefaultReasoningEffort,
-  isClaudeUltrathinkPrompt,
-  normalizeOpenCodeModelOptions,
-  resolveEffort,
-  resolveReasoningEffortForProvider,
-} from "@t3tools/shared/model";
+import { isClaudeUltrathinkPrompt, resolveEffort } from "@t3tools/shared/model";
 import {
   type ProviderKind,
   type ProviderModelOptions,
@@ -17,6 +11,7 @@ import { TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
 import {
   normalizeClaudeModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
+  normalizeOpenCodeModelOptions,
 } from "@t3tools/shared/model";
 
 export type ComposerProviderStateInput = {
@@ -82,7 +77,12 @@ function getProviderStateFromCapabilities(
   const normalizedOptions =
     provider === "codex"
       ? normalizeCodexModelOptionsWithCapabilities(caps, modelOptions?.codex)
-      : normalizeClaudeModelOptionsWithCapabilities(caps, modelOptions?.claudeAgent);
+      : provider === "claudeAgent"
+        ? normalizeClaudeModelOptionsWithCapabilities(caps, modelOptions?.claudeAgent)
+        : normalizeOpenCodeModelOptions(
+            modelOptions?.opencode,
+            caps.reasoningEffortLevels.map((option) => option.value),
+          );
 
   // Ultrathink styling (driven by capabilities data, not provider identity)
   const ultrathinkActive =
@@ -166,20 +166,36 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
     ),
   },
   opencode: {
-    getState: ({ modelOptions }) => {
-      const promptEffort =
-        resolveReasoningEffortForProvider("opencode", modelOptions?.opencode?.variant) ??
-        getDefaultReasoningEffort("opencode");
-      const normalizedOpenCodeOptions = normalizeOpenCodeModelOptions(modelOptions?.opencode);
-
-      return {
-        provider: "opencode",
-        promptEffort,
-        modelOptionsForDispatch: normalizedOpenCodeOptions,
-      };
-    },
-    renderTraitsMenuContent: () => null,
-    renderTraitsPicker: () => null,
+    getState: (input) => getProviderStateFromCapabilities({ ...input, provider: "opencode" }),
+    renderTraitsMenuContent: ({
+      threadId,
+      model,
+      models,
+      modelOptions,
+      prompt,
+      onPromptChange,
+    }) => (
+      <TraitsMenuContent
+        provider="opencode"
+        models={models}
+        threadId={threadId}
+        model={model}
+        modelOptions={modelOptions}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+      />
+    ),
+    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
+      <TraitsPicker
+        provider="opencode"
+        models={models}
+        threadId={threadId}
+        model={model}
+        modelOptions={modelOptions}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+      />
+    ),
   },
 };
 
