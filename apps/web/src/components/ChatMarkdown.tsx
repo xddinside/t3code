@@ -24,6 +24,7 @@ import { useTheme } from "../hooks/useTheme";
 import { resolveMarkdownFileLinkTarget } from "../markdown-links";
 import { readNativeApi } from "../nativeApi";
 import { containsMarkdownTable, normalizeMarkdownTables } from "../chatMarkdown";
+import MermaidDiagram from "./chat/MermaidDiagram";
 
 class CodeHighlightErrorBoundary extends React.Component<
   { fallback: ReactNode; children: ReactNode },
@@ -101,6 +102,11 @@ function extractCodeBlock(
     className: onlyChild.props.className,
     code: nodeToPlainText(onlyChild.props.children),
   };
+}
+
+function isMermaidFence(className: string | undefined): boolean {
+  if (!className) return false;
+  return className.includes("language-mermaid") || className.includes("mermaid");
 }
 
 function createHighlightCacheKey(code: string, language: string, themeName: DiffThemeName): string {
@@ -270,6 +276,14 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
         const codeBlock = extractCodeBlock(children);
         if (!codeBlock) {
           return <pre {...props}>{children}</pre>;
+        }
+
+        if (isMermaidFence(codeBlock.className)) {
+          return (
+            <div className="chat-markdown-mermaid">
+              <MermaidDiagram code={codeBlock.code} />
+            </div>
+          );
         }
 
         return (

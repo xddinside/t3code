@@ -396,6 +396,15 @@ label:has(> select#reasoning-effort) select {
   background: color-mix(in srgb, var(--card) 82%, var(--background));
 }
 
+.chat-markdown .chat-markdown-mermaid {
+  margin: 0.65rem 0;
+}
+
+.chat-markdown .chat-markdown-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .chat-markdown .chat-markdown-table-wrap table {
   margin: 0;
   width: max-content;
