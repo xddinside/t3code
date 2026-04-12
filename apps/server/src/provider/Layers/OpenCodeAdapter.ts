@@ -422,11 +422,17 @@ function normalizeRequestType(
   }
 }
 
-function extractPermissionDetail(props: Record<string, unknown>): string | undefined {
-  const permission = asString(props.permission);
+function extractPermissionDetail(
+  props: Record<string, unknown>,
+  permission: string | undefined,
+): string | undefined {
   if (permission === "external_directory") {
     const metadata = asRecord(props.metadata);
-    return asString(metadata?.parentDir) ?? asString(metadata?.filepath);
+    const path = asString(metadata?.parentDir) ?? asString(metadata?.filepath);
+    if (path) {
+      return `Access to "${path}" outside of workspace`;
+    }
+    return "Access to file or folder outside of workspace";
   }
 
   const patterns = asArray(props.patterns)
@@ -1371,8 +1377,8 @@ export const makeOpenCodeAdapterLive = (options?: OpenCodeAdapterLiveOptions) =>
                       raw,
                       payload: {
                         requestType: normalizeRequestType(asString(props.permission)),
-                        ...(extractPermissionDetail(props)
-                          ? { detail: extractPermissionDetail(props) }
+                        ...(extractPermissionDetail(props, props.permission)
+                          ? { detail: extractPermissionDetail(props, props.permission) }
                           : {}),
                       },
                     }),
